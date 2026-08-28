@@ -11,7 +11,7 @@ It never brute-forces credentials, bypasses authentication, exploits
 vulnerabilities, or performs destructive actions against target
 infrastructure. See [`docs/ETHICS.md`](docs/ETHICS.md).
 
-## Current status: Phase 1–2 of a phased build
+## Current status: Phase 1–3 of a phased build
 
 This repository ships a **complete, working vertical slice**, not a mockup:
 
@@ -25,19 +25,31 @@ This repository ships a **complete, working vertical slice**, not a mockup:
   findings — and explicitly distinguishes a **failed query** (timeout/SERVFAIL)
   from a **genuine negative result** (NXDOMAIN/no answer), so a network hiccup
   is never reported as a confirmed absence
+- A real infrastructure analyzer: reverse DNS (live DNS, not HTTP) for every
+  current A/AAAA record, RDAP lookups for ASN/network/organization/country
+  with **honest graceful degradation** — if RDAP is unreachable or blocked,
+  the platform marks `rdap_available: false` and shows no ownership data
+  rather than guessing (verified against this exact scenario: RDAP is
+  blocked by this build sandbox's own network policy, and the app handles
+  it correctly)
+- CDN/shared-hosting heuristic detection with named evidence, always framed
+  as a confidence-reducing indicator, never a certainty
 - Background job model (`ScanJob`) with step-by-step progress, run via Celery
   in production or synchronously for testing
 - React + TypeScript + Vite + Tailwind frontend wired to the real API — no
-  hardcoded/mock data — with loading, empty, and error states
-- 14 passing backend tests (API + analyzer unit tests, including a regression
-  test for the timeout/negative-result bug found and fixed during this build)
+  hardcoded/mock data — with loading, empty, and error states, including a
+  live infrastructure panel with its own job polling
+- 25 passing backend tests (API + both analyzers + task-level tests with
+  mocked RDAP covering both success and failure paths), including a
+  regression test for the timeout/negative-result bug found and fixed
+  during this build
 
-The remaining apps (`certificates`, `infrastructure`, `services`,
-`lifecycle`, `monitoring`, `alerts`, `reports`) are scaffolded (registered
-Django apps with their own migrations folder) but intentionally left empty
-rather than filled with fake data — see [`docs/ROADMAP.md`](docs/ROADMAP.md)
-for the phase-by-phase plan to complete them, matching the spec's own
-"Implementation Priority" phases.
+The remaining apps (`certificates`, `services`, `lifecycle`, `monitoring`,
+`alerts`, `reports`) are scaffolded (registered Django apps with their own
+migrations folder) but intentionally left empty rather than filled with
+fake data — see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the phase-by-phase
+plan to complete them, matching the spec's own "Implementation Priority"
+phases.
 
 ## Project structure
 
@@ -50,7 +62,7 @@ dns-sentinel/
 │   │   ├── accounts/          # auth
 │   │   ├── dns_intelligence/  # DONE: resolver, analyzer, models, API, tasks, tests
 │   │   ├── certificates/      # scaffolded, Phase 4
-│   │   ├── infrastructure/    # scaffolded, Phase 3
+│   │   ├── infrastructure/    # DONE: rdap_client, analyzer, models, API, tasks, tests
 │   │   ├── services/          # scaffolded, Phase 5
 │   │   ├── lifecycle/         # scaffolded, Phase 6 (evidence + scoring engine)
 │   │   ├── monitoring/        # scaffolded, Phase 7
@@ -97,7 +109,7 @@ Backend API is now at `http://localhost:8000/api/`.
 
 Run tests:
 ```bash
-pytest apps/dns_intelligence/tests/ -v
+pytest apps/dns_intelligence/tests/ apps/infrastructure/tests/ -v
 ```
 
 ### Celery (background jobs)
@@ -130,12 +142,21 @@ boundaries and what it explicitly refuses to do.
 
 ## Known limitations (current phase)
 
-- No certificate, infrastructure, service, or lifecycle-classification
-  functionality yet — those are the next phases.
+- No certificate, service, or lifecycle-classification functionality yet
+  — those are the next phases.
 - No monitoring/alerting/reporting yet.
 - DNSSEC support is a best-effort passive signal (presence of DNSKEY/DS),
   not full chain-of-trust validation.
-- The analyzer intentionally reports DNS query failures (timeouts,
+- The DNS analyzer intentionally reports DNS query failures (timeouts,
   SERVFAIL) as their own "query failed" finding rather than inferring
   absence — treat those record types as `UNKNOWN` until a successful
   query is observed.
+- RDAP (used for ASN/organization/network) is a public lookup that can be
+  slow, rate-limited, or unreachable from restrictive network
+  environments. When it fails, `IPAddress.rdap_available` is `False` and
+  no ownership fields are populated — the frontend surfaces this
+  explicitly rather than showing blank or fabricated values.
+- CDN/shared-hosting detection is a heuristic based on organization/reverse-DNS
+  name substrings, not an authoritative registry — expect false negatives,
+  and treat positive matches as a reason to reduce confidence in downstream
+  ownership/lifecycle conclusions, not as proof.

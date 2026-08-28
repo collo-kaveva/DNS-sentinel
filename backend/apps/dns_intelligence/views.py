@@ -9,7 +9,7 @@ from .serializers import (
     DomainSerializer, ScanJobSerializer, DNSRecordSerializer,
     DNSObservationSerializer, DNSFindingSerializer,
 )
-from .tasks import run_dns_discovery_and_analysis, _init_progress
+from .tasks import run_dns_discovery_and_analysis, _init_progress as _init_dns_progress
 
 
 class ScanThrottle(UserRateThrottle):
@@ -79,10 +79,40 @@ class DomainViewSet(viewsets.ModelViewSet):
         job = ScanJob.objects.create(
             domain=domain,
             job_type=ScanJob.JobType.DNS_DISCOVERY,
-            progress_steps=_init_progress(),
+            progress_steps=_init_dns_progress(),
         )
         run_dns_discovery_and_analysis.delay(str(job.id))
         return Response(ScanJobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+    @action(
+        detail=True, methods=["post"], url_path="investigate-infrastructure",
+        throttle_classes=[ScanThrottle],
+    )
+    def investigate_infrastructure(self, request, pk=None):
+        from apps.infrastructure.tasks import run_infrastructure_analysis, _init_progress as _init_infra_progress
+
+        domain = self.get_object()
+        if not domain.authorized:
+            return Response(
+                {"detail": "This domain is not marked as authorized for investigation."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        job = ScanJob.objects.create(
+            domain=domain,
+            job_type=ScanJob.JobType.INFRASTRUCTURE_ANALYSIS,
+            progress_steps=_init_infra_progress(),
+        )
+        run_infrastructure_analysis.delay(str(job.id))
+        return Response(ScanJobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["get"], url_path="infrastructure")
+    def infrastructure(self, request, pk=None):
+        from apps.infrastructure.models import IPAddress
+        from apps.infrastructure.serializers import IPAddressSerializer
+
+        domain = self.get_object()
+        qs = IPAddress.objects.filter(domain=domain)
+        return Response(IPAddressSerializer(qs, many=True).data)
 
 
 class ScanJobViewSet(viewsets.ReadOnlyModelViewSet):

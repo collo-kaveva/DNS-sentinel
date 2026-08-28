@@ -1,5 +1,5 @@
 import type {
-  User, Domain, ScanJob, DNSRecord, DNSObservation, DNSFinding, Paginated,
+  User, Domain, ScanJob, DNSRecord, DNSObservation, DNSFinding, Paginated, IPAddressInfo,
 } from "../types";
 
 const BASE = "/api";
@@ -83,4 +83,9 @@ export const api = {
   dnsObservations: (id: string) => request<DNSObservation[]>(`/domains/${id}/observations/`),
 
   dnsFindings: (id: string) => request<DNSFinding[]>(`/domains/${id}/findings/`),
+
+  investigateInfrastructure: (id: string) =>
+    request<ScanJob>(`/domains/${id}/investigate-infrastructure/`, { method: "POST" }),
+
+  infrastructure: (id: string) => request<IPAddressInfo[]>(`/domains/${id}/infrastructure/`),
 };

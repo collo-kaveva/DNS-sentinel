@@ -15,13 +15,22 @@ historical observations, DNS configuration analyzer with INFO/LOW/MEDIUM/HIGH
 findings that correctly distinguish query failures from genuine negative
 results, background job model with step-by-step progress.
 
-## ⬜ Phase 3 — Infrastructure
-- `apps/infrastructure`: `IPAddress`, `InfrastructureObservation` models
-- IP metadata: ASN, network/org (via a passive WHOIS/RDAP or BGP data
-  source — needs a provider decision, see below), reverse DNS
-  (`resolver.reverse_lookup` already exists), CDN/proxy heuristics
-- Current vs. historical vs. estimated labeling
-- Asset inventory view aggregating DNS + IP data per domain
+## ✅ Phase 3 — Infrastructure
+- `apps/infrastructure`: `IPAddress`, `InfrastructureObservation` models — done
+- IP metadata via RDAP (no API key required): ASN, network/org, country —
+  with honest graceful degradation when RDAP is unreachable (verified: this
+  build sandbox's own network policy blocks RDAP, and the app correctly
+  reports `rdap_available: false` rather than fabricating data)
+- Reverse DNS via the existing DNS resolver (works over raw DNS even where
+  HTTP-based lookups are blocked)
+- CDN/shared-hosting heuristics based on organization/reverse-DNS name
+  matching, always framed as a confidence-reducing indicator
+- Current vs. historical labeling (an IP no longer in current DNS records
+  is automatically flipped to `HISTORICAL`, never deleted)
+- Still open: `ESTIMATED` status is defined but not yet populated by any
+  code path — reserved for a future phase that infers likely infrastructure
+  from incomplete historical data — and the asset-inventory aggregation
+  view (combining DNS + IP data across all domains) isn't built yet.
 
 ## ⬜ Phase 4 — Certificates
 - `apps/certificates`: `Certificate`, `CertificateObservation` models
@@ -65,20 +74,17 @@ results, background job model with step-by-step progress.
 - Rate limiting tuning per-target, input validation audit, permission test
   sweep, full README/architecture docs, CI
 
-## Open decisions before Phase 3–4 can be fully "real" (not faked)
+## Open decisions before Phase 4 can be fully "real" (not faked)
 
 The spec is explicit that historical/passive data sources must never be
-faked. Two integrations need a decision from whoever deploys this:
+faked. One integration still needs a decision from whoever deploys this:
 
-1. **ASN/network ownership**: a free/passive option is RDAP
-   (`https://rdap.org` or per-RIR endpoints) — no API key required, but
-   rate-limited. A paid option (e.g. a commercial BGP/ASN API) would be
-   more reliable for production monitoring.
-2. **Certificate history**: crt.sh (Certificate Transparency) is free and
+1. **Certificate history**: crt.sh (Certificate Transparency) is free and
    requires no key, but has no formal SLA and can be slow/unavailable.
    If it's down, the platform should show "Historical data unavailable —
    classification confidence reduced," never synthesize a plausible-looking
-   history.
+   history. (ASN/network ownership is now handled via RDAP, implemented in
+   Phase 3, with the same graceful-degradation pattern.)
 
 Both should be implemented with graceful degradation from day one, per the
 spec's Section 43 ("Do Not Fake Functionality").

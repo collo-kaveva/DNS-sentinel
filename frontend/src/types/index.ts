@@ -70,6 +70,24 @@ export interface DNSFinding {
   created_at: string;
 }
 
+export interface IPAddressInfo {
+  id: string;
+  address: string;
+  version: "IPv4" | "IPv6";
+  association_status: "CURRENT" | "HISTORICAL" | "ESTIMATED" | "UNKNOWN";
+  reverse_dns: string | null;
+  asn: string | null;
+  network: string | null;
+  organization: string | null;
+  country: string | null;
+  is_likely_cdn: boolean;
+  is_likely_shared_hosting: boolean;
+  cdn_indicator_source: string;
+  rdap_available: boolean;
+  first_seen: string;
+  last_seen: string;
+}
+
 export interface Paginated<T> {
   count: number;
   next: string | null;
