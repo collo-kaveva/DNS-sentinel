@@ -1,6 +1,6 @@
 # DNS Sentinel
 
-**Public infrastructure intelligence & lifecycle classification platform.**
+**Public infrastructure intelligence & lifecycle classification platform**
 
 DNS Sentinel investigates *publicly observable* DNS, certificate, infrastructure,
 and service metadata for domains you are authorized to assess, and correlates
