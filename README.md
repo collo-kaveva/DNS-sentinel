@@ -1,4 +1,4 @@
-# DNS Sentinel
+# The DNS Sentinel
 
 **Public infrastructure intelligence & lifecycle classification platform**
 
