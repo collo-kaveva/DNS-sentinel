@@ -5,6 +5,11 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import DomainsPage from "./pages/DomainsPage";
 import DomainDetailPage from "./pages/DomainDetailPage";
+import InfrastructurePage from "./pages/InfrastructurePage";
+import CertificatesPage from "./pages/CertificatesPage";
+import ServicesPage from "./pages/ServicesPage";
+import LifecyclePage from "./pages/LifecyclePage";
+import MonitoringPage from "./pages/MonitoringPage";
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
@@ -18,6 +23,11 @@ function ProtectedRoutes() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/domains" element={<DomainsPage />} />
         <Route path="/domains/:id" element={<DomainDetailPage />} />
+        <Route path="/infrastructure" element={<InfrastructurePage />} />
+        <Route path="/certificates" element={<CertificatesPage />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/lifecycle" element={<LifecyclePage />} />
+        <Route path="/monitoring" element={<MonitoringPage />} />
       </Route>
     </Routes>
   );

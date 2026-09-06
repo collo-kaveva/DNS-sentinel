@@ -4,6 +4,11 @@ import { useAuth } from "../hooks/useAuth";
 const NAV = [
   { to: "/", label: "Dashboard" },
   { to: "/domains", label: "Domains" },
+  { to: "/infrastructure", label: "Infrastructure" },
+  { to: "/certificates", label: "Certificates" },
+  { to: "/services", label: "Services" },
+  { to: "/lifecycle", label: "Lifecycle" },
+  { to: "/monitoring", label: "Monitoring" },
 ];
 
 export default function AppLayout() {
