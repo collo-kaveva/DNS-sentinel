@@ -12,6 +12,9 @@ const NAV = [
   { to: "/alerts", label: "Alerts" },
   { to: "/reports", label: "Reports" },
   { to: "/history", label: "History" },
+  { to: "/evidence", label: "Evidence" },
+  { to: "/audit", label: "Audit" },
+  { to: "/settings", label: "Settings" },
 ];
 
 export default function AppLayout() {
