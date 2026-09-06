@@ -9,6 +9,9 @@ const NAV = [
   { to: "/services", label: "Services" },
   { to: "/lifecycle", label: "Lifecycle" },
   { to: "/monitoring", label: "Monitoring" },
+  { to: "/alerts", label: "Alerts" },
+  { to: "/reports", label: "Reports" },
+  { to: "/history", label: "History" },
 ];
 
 export default function AppLayout() {
