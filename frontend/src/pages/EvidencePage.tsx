@@ -1,147 +1,91 @@
 import { useState, useEffect } from "react";
 import { api, ApiError } from "../services/api";
-import type { Domain, DNSObservation, IPAddressInfo, DNSRecord } from "../types";
-
-interface EvidenceNode {
-  id: string;
-  type: "domain" | "subdomain" | "ip" | "certificate" | "service" | "asn" | "provider" | "observation" | "alert" | "lifecycle";
-  name: string;
-  data?: any;
-}
-
-interface EvidenceEdge {
-  from: string;
-  to: string;
-  label: string;
-}
+import type { Domain, Evidence, EvidenceRelationship } from "../types";
 
 export default function EvidencePage() {
   const [domains, setDomains] = useState<Domain[]>([]);
-  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
-  const [dnsObservations, setDnsObservations] = useState<DNSObservation[]>([]);
-  const [infrastructure, setInfrastructure] = useState<IPAddressInfo[]>([]);
-  const [dnsRecords, setDnsRecords] = useState<DNSRecord[]>([]);
-  const [selectedNode, setSelectedNode] = useState<EvidenceNode | null>(null);
+  const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
+  const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [relationships, setRelationships] = useState<EvidenceRelationship[]>([]);
+  const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Filters
+  // Filter states
   const [evidenceTypeFilter, setEvidenceTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [confidenceFilter, setConfidenceFilter] = useState("");
 
   useEffect(() => {
-    loadEvidenceData();
+    loadDomains();
   }, []);
 
-  const loadEvidenceData = async () => {
+  useEffect(() => {
+    if (selectedDomain) {
+      loadEvidence();
+    }
+  }, [selectedDomain, evidenceTypeFilter, statusFilter, sourceFilter, confidenceFilter]);
+
+  const loadDomains = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [domainsRes] = await Promise.all([
-        api.listDomains(),
-      ]);
-      setDomains(domainsRes.results);
-      
-      if (domainsRes.results.length > 0) {
-        setSelectedDomain(domainsRes.results[0].id);
-        await loadDomainEvidence(domainsRes.results[0].id);
+      const response = await api.listDomains();
+      setDomains(response.results);
+      if (response.results.length > 0) {
+        setSelectedDomain(response.results[0]);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load evidence data");
+      setError(err instanceof ApiError ? err.message : "Failed to load domains");
     } finally {
       setLoading(false);
     }
   };
 
-  const loadDomainEvidence = async (domainId: string) => {
+  const loadEvidence = async () => {
+    if (!selectedDomain) return;
+    
+    setLoading(true);
+    setError(null);
     try {
-      const [obsData, infraData, recordsData] = await Promise.all([
-        api.dnsObservations(domainId).catch(() => []),
-        api.infrastructure(domainId).catch(() => []),
-        api.dnsRecords(domainId).catch(() => []),
+      const [evidenceData, relationshipsData] = await Promise.all([
+        api.listEvidence({
+          domain: selectedDomain.id,
+          evidence_type: evidenceTypeFilter || undefined,
+          status: statusFilter || undefined,
+          source: sourceFilter || undefined,
+          confidence: confidenceFilter || undefined,
+        }),
+        api.listEvidenceRelationships().catch(() => ({ results: [] })),
       ]);
-      setDnsObservations(obsData);
-      setInfrastructure(infraData);
-      setDnsRecords(recordsData);
+      
+      setEvidence(evidenceData.results);
+      setRelationships(relationshipsData.results);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load domain evidence");
+      setError(err instanceof ApiError ? err.message : "Failed to load evidence");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDomainChange = (domainId: string) => {
-    setSelectedDomain(domainId);
-    loadDomainEvidence(domainId);
-    setSelectedNode(null);
+    const domain = domains.find(d => d.id === domainId);
+    setSelectedDomain(domain || null);
+    setSelectedEvidence(null);
   };
 
-  // Build evidence graph nodes
-  const buildEvidenceNodes = (): EvidenceNode[] => {
-    const nodes: EvidenceNode[] = [];
-    
-    const domain = domains.find(d => d.id === selectedDomain);
-    if (domain) {
-      nodes.push({
-        id: domain.id,
-        type: "domain",
-        name: domain.name,
-        data: domain,
-      });
-    }
-
-    // Add IP addresses as nodes
-    infrastructure.forEach(ip => {
-      nodes.push({
-        id: ip.id,
-        type: "ip",
-        name: ip.address,
-        data: ip,
-      });
-    });
-
-    // Add DNS observations as nodes
-    dnsObservations.forEach(obs => {
-      nodes.push({
-        id: obs.id,
-        type: "observation",
-        name: `${obs.hostname} (${obs.record_type})`,
-        data: obs,
-      });
-    });
-
-    return nodes;
-  };
-
-  // Build evidence graph edges
-  const buildEvidenceEdges = (): EvidenceEdge[] => {
-    const edges: EvidenceEdge[] = [];
-    
-    const domain = domains.find(d => d.id === selectedDomain);
-    if (domain) {
-      // Domain to IP edges
-      infrastructure.forEach(ip => {
-        edges.push({
-          from: domain.id,
-          to: ip.id,
-          label: "resolves to",
-        });
-      });
-
-      // Domain to observation edges
-      dnsObservations.forEach(obs => {
-        edges.push({
-          from: domain.id,
-          to: obs.id,
-          label: "observed",
-        });
-      });
-    }
-
-    return edges;
+  // Build evidence graph nodes from evidence data
+  const buildEvidenceNodes = () => {
+    return evidence.map(ev => ({
+      id: ev.id,
+      type: ev.evidence_type.toLowerCase(),
+      name: ev.entity_name || ev.observation,
+      data: ev,
+    }));
   };
 
   const nodes = buildEvidenceNodes();
-  const edges = buildEvidenceEdges();
 
   if (loading) {
     return (
@@ -164,7 +108,7 @@ export default function EvidencePage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={loadEvidenceData}
+              onClick={loadEvidence}
               className="text-xs bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded hover:bg-slate-700"
             >
               Refresh
@@ -176,7 +120,7 @@ export default function EvidencePage() {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
           <select
             className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm w-full md:w-64"
-            value={selectedDomain || ""}
+            value={selectedDomain?.id || ""}
             onChange={(e) => handleDomainChange(e.target.value)}
           >
             <option value="">Select a domain...</option>
@@ -257,20 +201,12 @@ export default function EvidencePage() {
                 <div className="text-xs text-slate-500 mb-2">Evidence Summary</div>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Total Nodes</span>
-                    <span className="text-slate-300">{nodes.length}</span>
+                    <span className="text-slate-400">Total Evidence</span>
+                    <span className="text-slate-300">{evidence.length}</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-400">Relationships</span>
-                    <span className="text-slate-300">{edges.length}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Observations</span>
-                    <span className="text-slate-300">{dnsObservations.length}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">IP Addresses</span>
-                    <span className="text-slate-300">{infrastructure.length}</span>
+                    <span className="text-slate-300">{relationships.length}</span>
                   </div>
                 </div>
               </div>
@@ -289,9 +225,9 @@ export default function EvidencePage() {
                     {nodes.slice(0, 12).map(node => (
                       <div
                         key={node.id}
-                        onClick={() => setSelectedNode(node)}
+                        onClick={() => setSelectedEvidence(node.data)}
                         className={`p-3 rounded border cursor-pointer transition-colors ${
-                          selectedNode?.id === node.id
+                          selectedEvidence?.id === node.id
                             ? "bg-accent/10 border-accent text-accent"
                             : "bg-slate-800/30 border-slate-700 text-slate-300 hover:bg-slate-800/50"
                         }`}
@@ -347,112 +283,70 @@ export default function EvidencePage() {
             <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">Evidence Details</h3>
               
-              {selectedNode ? (
+              {selectedEvidence ? (
                 <div className="space-y-4">
                   <div>
-                    <div className="text-xs text-slate-500 mb-1">Entity Type</div>
-                    <div className="text-sm text-slate-300">{selectedNode.type.toUpperCase()}</div>
+                    <div className="text-xs text-slate-500 mb-1">Evidence Type</div>
+                    <div className="text-sm text-slate-300">{selectedEvidence.evidence_type.replace(/_/g, " ")}</div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-500 mb-1">Name</div>
-                    <div className="text-sm text-slate-300">{selectedNode.name}</div>
+                    <div className="text-xs text-slate-500 mb-1">Status</div>
+                    <div className={`text-sm ${
+                      selectedEvidence.status === "OBSERVED" ? "text-emerald-400" :
+                      selectedEvidence.status === "HISTORICAL" ? "text-amber-400" :
+                      "text-slate-400"
+                    }`}>
+                      {selectedEvidence.status}
+                    </div>
                   </div>
 
-                  {selectedNode.type === "ip" && selectedNode.data && (
-                    <>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Association Status</div>
-                        <div className={`text-sm ${
-                          selectedNode.data.association_status === "CURRENT" ? "text-emerald-400" :
-                          selectedNode.data.association_status === "HISTORICAL" ? "text-amber-400" :
-                          "text-slate-400"
-                        }`}>
-                          {selectedNode.data.association_status}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Organization</div>
-                        <div className="text-sm text-slate-300">
-                          {selectedNode.data.organization || "Unknown"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Country</div>
-                        <div className="text-sm text-slate-300">
-                          {selectedNode.data.country || "Unknown"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">ASN</div>
-                        <div className="text-sm text-slate-300">
-                          {selectedNode.data.asn || "Unknown"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Likely CDN</div>
-                        <div className={`text-sm ${selectedNode.data.is_likely_cdn ? "text-emerald-400" : "text-slate-400"}`}>
-                          {selectedNode.data.is_likely_cdn ? "Yes" : "No"}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">Confidence</div>
+                    <div className={`text-sm ${
+                      selectedEvidence.confidence === "HIGH" ? "text-emerald-400" :
+                      selectedEvidence.confidence === "MEDIUM" ? "text-amber-400" :
+                      "text-slate-400"
+                    }`}>
+                      {selectedEvidence.confidence}
+                    </div>
+                  </div>
 
-                  {selectedNode.type === "observation" && selectedNode.data && (
-                    <>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Source</div>
-                        <div className="text-sm text-slate-300">{selectedNode.data.source}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Confidence</div>
-                        <div className={`text-sm ${
-                          selectedNode.data.confidence === "HIGH" ? "text-emerald-400" :
-                          selectedNode.data.confidence === "MEDIUM" ? "text-amber-400" :
-                          "text-slate-400"
-                        }`}>
-                          {selectedNode.data.confidence}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Observed At</div>
-                        <div className="text-sm text-slate-300">
-                          {new Date(selectedNode.data.observed_at).toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Values</div>
-                        <div className="text-sm text-slate-300">
-                          {selectedNode.data.values?.length > 0 
-                            ? selectedNode.data.values.join(", ") 
-                            : "None"}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">Source</div>
+                    <div className="text-sm text-slate-300">{selectedEvidence.source}</div>
+                  </div>
 
-                  {selectedNode.type === "domain" && selectedNode.data && (
-                    <>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Authorized</div>
-                        <div className={`text-sm ${selectedNode.data.authorized ? "text-emerald-400" : "text-amber-400"}`}>
-                          {selectedNode.data.authorized ? "Yes" : "No"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Created</div>
-                        <div className="text-sm text-slate-300">
-                          {new Date(selectedNode.data.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-500 mb-1">Notes</div>
-                        <div className="text-sm text-slate-300">
-                          {selectedNode.data.notes || "None"}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">Entity Name</div>
+                    <div className="text-sm text-slate-300">{selectedEvidence.entity_name || "N/A"}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">Observation</div>
+                    <div className="text-sm text-slate-300 truncate">{selectedEvidence.observation}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">Observed At</div>
+                    <div className="text-sm text-slate-300">
+                      {new Date(selectedEvidence.observed_at).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">First Observed</div>
+                    <div className="text-sm text-slate-300">
+                      {new Date(selectedEvidence.first_observed).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-slate-500 mb-1">Last Observed</div>
+                    <div className="text-sm text-slate-300">
+                      {new Date(selectedEvidence.last_observed).toLocaleString()}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="py-8 text-center">
@@ -468,15 +362,15 @@ export default function EvidencePage() {
             <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 mt-6">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">Evidence Timeline</h3>
               
-              {dnsObservations.length > 0 ? (
+              {evidence.length > 0 ? (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {dnsObservations.slice(0, 10).map(obs => (
-                    <div key={obs.id} className="bg-slate-800/30 border border-slate-700 rounded p-2">
+                  {evidence.slice(0, 10).map(ev => (
+                    <div key={ev.id} className="bg-slate-800/30 border border-slate-700 rounded p-2">
                       <div className="text-xs text-slate-400 mb-1">
-                        {new Date(obs.observed_at).toLocaleString()}
+                        {new Date(ev.observed_at).toLocaleString()}
                       </div>
                       <div className="text-xs text-slate-300">
-                        {obs.hostname} ({obs.record_type})
+                        {ev.evidence_type}: {ev.entity_name || ev.observation}
                       </div>
                     </div>
                   ))}

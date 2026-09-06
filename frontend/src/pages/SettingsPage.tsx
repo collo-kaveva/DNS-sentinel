@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { api, ApiError } from "../services/api";
+import type { UserSettings } from "../types";
 
 type SettingsSection = "general" | "monitoring" | "notifications" | "security" | "account";
 
@@ -11,37 +12,81 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
 
   // General settings
-  const [dateFormat, setDateFormat] = useState("ISO 8601");
-  const [timeFormat, setTimeFormat] = useState("24-hour");
+  const [dateFormat, setDateFormat] = useState("ISO_8601");
+  const [timeFormat, setTimeFormat] = useState("24_HOUR");
   const [timezone, setTimezone] = useState("UTC");
 
   // Monitoring settings
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState("5");
-  const [defaultMonitoringBehavior, setDefaultMonitoringBehavior] = useState("passive");
+  const [refreshInterval, setRefreshInterval] = useState(5);
+  const [defaultMonitoringBehavior, setDefaultMonitoringBehavior] = useState("PASSIVE");
 
   // Notification settings
   const [emailAlerts, setEmailAlerts] = useState(false);
   const [alertSeverity, setAlertSeverity] = useState("HIGH");
 
   // Security settings
-  const [sessionTimeout, setSessionTimeout] = useState("60");
+  const [sessionTimeout, setSessionTimeout] = useState(60);
 
   // Account settings
   const [username, setUsername] = useState(user?.username || "");
   const [email, setEmail] = useState(user?.email || "");
+
+  const loadSettings = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.getSettings();
+      setSettings(data);
+      
+      // Update local state with loaded settings
+      setDateFormat(data.date_format);
+      setTimeFormat(data.time_format);
+      setTimezone(data.timezone);
+      setAutoRefresh(data.auto_refresh);
+      setRefreshInterval(data.refresh_interval_minutes);
+      setDefaultMonitoringBehavior(data.default_monitoring_behavior);
+      setEmailAlerts(data.email_alerts);
+      setAlertSeverity(data.alert_severity_threshold);
+      setSessionTimeout(data.session_timeout_minutes);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load settings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
   const handleSave = async () => {
     setError(null);
     setSuccess(null);
     setSaving(true);
     try {
-      // Account settings update would go here when backend supports it
-      // await api.updateProfile({ username, email });
+      const updateData: Partial<UserSettings> = {
+        date_format: dateFormat as any,
+        time_format: timeFormat as any,
+        timezone,
+        auto_refresh: autoRefresh,
+        refresh_interval_minutes: refreshInterval,
+        default_monitoring_behavior: defaultMonitoringBehavior as any,
+        email_alerts: emailAlerts,
+        alert_severity_threshold: alertSeverity as any,
+        session_timeout_minutes: sessionTimeout,
+      };
+      
+      await api.updateSettings(updateData);
       setSuccess("Settings saved successfully");
       setHasChanges(false);
+      
+      // Reload settings to confirm
+      await loadSettings();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save settings");
     } finally {
@@ -50,17 +95,17 @@ export default function SettingsPage() {
   };
 
   const handleReset = () => {
-    setDateFormat("ISO 8601");
-    setTimeFormat("24-hour");
-    setTimezone("UTC");
-    setAutoRefresh(false);
-    setRefreshInterval("5");
-    setDefaultMonitoringBehavior("passive");
-    setEmailAlerts(false);
-    setAlertSeverity("HIGH");
-    setSessionTimeout("60");
-    setUsername(user?.username || "");
-    setEmail(user?.email || "");
+    if (settings) {
+      setDateFormat(settings.date_format);
+      setTimeFormat(settings.time_format);
+      setTimezone(settings.timezone);
+      setAutoRefresh(settings.auto_refresh);
+      setRefreshInterval(settings.refresh_interval_minutes);
+      setDefaultMonitoringBehavior(settings.default_monitoring_behavior);
+      setEmailAlerts(settings.email_alerts);
+      setAlertSeverity(settings.alert_severity_threshold);
+      setSessionTimeout(settings.session_timeout_minutes);
+    }
     setHasChanges(false);
   };
 
@@ -159,7 +204,7 @@ export default function SettingsPage() {
                 <select
                   className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm"
                   value={refreshInterval}
-                  onChange={(e) => { setRefreshInterval(e.target.value); setHasChanges(true); }}
+                  onChange={(e) => { setRefreshInterval(parseInt(e.target.value)); setHasChanges(true); }}
                   disabled={!autoRefresh}
                 >
                   <option value="1">1 minute</option>
@@ -244,7 +289,7 @@ export default function SettingsPage() {
                 <select
                   className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm"
                   value={sessionTimeout}
-                  onChange={(e) => { setSessionTimeout(e.target.value); setHasChanges(true); }}
+                  onChange={(e) => { setSessionTimeout(parseInt(e.target.value)); setHasChanges(true); }}
                 >
                   <option value="30">30 minutes</option>
                   <option value="60">1 hour</option>
@@ -323,6 +368,14 @@ export default function SettingsPage() {
         return null;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="text-slate-500 text-sm">Loading settings…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto">

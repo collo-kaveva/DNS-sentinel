@@ -1,5 +1,7 @@
 import type {
   User, Domain, ScanJob, DNSRecord, DNSObservation, DNSFinding, Paginated, IPAddressInfo,
+  AuditEvent, UserSettings, Investigation, AnalystNote, Evidence, EvidenceRelationship,
+  LifecycleAssessment, TimelineEvent,
 } from "../types";
 
 const BASE = "/api";
@@ -88,4 +90,211 @@ export const api = {
     request<ScanJob>(`/domains/${id}/investigate-infrastructure/`, { method: "POST" }),
 
   infrastructure: (id: string) => request<IPAddressInfo[]>(`/domains/${id}/infrastructure/`),
+
+  // Audit API
+  listAuditEvents: (params?: {
+    event_type?: string;
+    resource_type?: string;
+    result?: string;
+    date_from?: string;
+    date_to?: string;
+    page?: number;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.event_type) queryParams.set("event_type", params.event_type);
+    if (params?.resource_type) queryParams.set("resource_type", params.resource_type);
+    if (params?.result) queryParams.set("result", params.result);
+    if (params?.date_from) queryParams.set("date_from", params.date_from);
+    if (params?.date_to) queryParams.set("date_to", params.date_to);
+    if (params?.page) queryParams.set("page", params.page.toString());
+    const queryString = queryParams.toString();
+    return request<Paginated<AuditEvent>>(`/auth/audit/${queryString ? `?${queryString}` : ""}`);
+  },
+
+  getAuditEvent: (id: string) => request<AuditEvent>(`/auth/audit/${id}/`),
+
+  // Settings API
+  getSettings: () => request<UserSettings>("/auth/settings/"),
+
+  updateSettings: (data: Partial<UserSettings>) =>
+    request<UserSettings>("/auth/settings/", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  // Investigation API
+  listInvestigations: (params?: {
+    domain?: string;
+    status?: string;
+    priority?: string;
+    assigned_analyst?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.domain) queryParams.set("domain", params.domain);
+    if (params?.status) queryParams.set("status", params.status);
+    if (params?.priority) queryParams.set("priority", params.priority);
+    if (params?.assigned_analyst) queryParams.set("assigned_analyst", params.assigned_analyst);
+    const queryString = queryParams.toString();
+    return request<Paginated<Investigation>>(`/investigation/investigations/${queryString ? `?${queryString}` : ""}`);
+  },
+
+  getInvestigation: (id: string) => request<Investigation>(`/investigation/investigations/${id}/`),
+
+  createInvestigation: (data: {
+    domain: string;
+    title: string;
+    description?: string;
+    priority?: string;
+  }) =>
+    request<Investigation>("/investigation/investigations/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateInvestigation: (id: string, data: Partial<Investigation>) =>
+    request<Investigation>(`/investigation/investigations/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  changeInvestigationStatus: (id: string, status: string) =>
+    request<Investigation>(`/investigation/investigations/${id}/change_status/`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+
+  assignInvestigation: (id: string, analyst_id: string) =>
+    request<Investigation>(`/investigation/investigations/${id}/assign/`, {
+      method: "POST",
+      body: JSON.stringify({ analyst_id }),
+    }),
+
+  getInvestigationTimeline: (id: string, limit?: number) => {
+    const queryParams = new URLSearchParams();
+    if (limit) queryParams.set("limit", limit.toString());
+    const queryString = queryParams.toString();
+    return request<{ investigation_id: string; timeline: TimelineEvent[] }>(
+      `/investigation/investigations/${id}/timeline/${queryString ? `?${queryString}` : ""}`
+    );
+  },
+
+  getInvestigationRelatedEvidence: (id: string) =>
+    request<{ investigation_id: string; related_evidence: string[] }>(
+      `/investigation/investigations/${id}/related_evidence/`
+    ),
+
+  addEvidenceToInvestigation: (id: string, evidence_id: string) =>
+    request<{ related_evidence: string[] }>(`/investigation/investigations/${id}/add_evidence/`, {
+      method: "POST",
+      body: JSON.stringify({ evidence_id }),
+    }),
+
+  // Analyst Notes API
+  listAnalystNotes: (params?: { investigation?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.investigation) queryParams.set("investigation", params.investigation);
+    const queryString = queryParams.toString();
+    return request<Paginated<AnalystNote>>(`/investigation/analyst-notes/${queryString ? `?${queryString}` : ""}`);
+  },
+
+  getAnalystNote: (id: string) => request<AnalystNote>(`/investigation/analyst-notes/${id}/`),
+
+  createAnalystNote: (data: {
+    investigation: string;
+    content: string;
+  }) =>
+    request<AnalystNote>("/investigation/analyst-notes/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateAnalystNote: (id: string, data: Partial<AnalystNote>) =>
+    request<AnalystNote>(`/investigation/analyst-notes/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  deleteAnalystNote: (id: string) =>
+    request<void>(`/investigation/analyst-notes/${id}/`, { method: "DELETE" }),
+
+  // Evidence API
+  listEvidence: (params?: {
+    domain?: string;
+    evidence_type?: string;
+    status?: string;
+    source?: string;
+    confidence?: string;
+    date_from?: string;
+    date_to?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.domain) queryParams.set("domain", params.domain);
+    if (params?.evidence_type) queryParams.set("evidence_type", params.evidence_type);
+    if (params?.status) queryParams.set("status", params.status);
+    if (params?.source) queryParams.set("source", params.source);
+    if (params?.confidence) queryParams.set("confidence", params.confidence);
+    if (params?.date_from) queryParams.set("date_from", params.date_from);
+    if (params?.date_to) queryParams.set("date_to", params.date_to);
+    const queryString = queryParams.toString();
+    return request<Paginated<Evidence>>(`/lifecycle/evidence/${queryString ? `?${queryString}` : ""}`);
+  },
+
+  getEvidence: (id: string) => request<Evidence>(`/lifecycle/evidence/${id}/`),
+
+  getEvidenceForAsset: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<Paginated<Evidence>>(`/lifecycle/evidence/for_asset/?${queryParams.toString()}`);
+  },
+
+  getRelatedEvidence: (evidence_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("evidence_id", evidence_id);
+    return request<Evidence[]>(`/lifecycle/evidence/related/?${queryParams.toString()}`);
+  },
+
+  // Evidence Relationships API
+  listEvidenceRelationships: (params?: { evidence_id?: string; relationship_type?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.evidence_id) queryParams.set("evidence_id", params.evidence_id);
+    if (params?.relationship_type) queryParams.set("relationship_type", params.relationship_type);
+    const queryString = queryParams.toString();
+    return request<Paginated<EvidenceRelationship>>(
+      `/lifecycle/evidence-relationships/${queryString ? `?${queryString}` : ""}`
+    );
+  },
+
+  getEvidenceRelationship: (id: string) =>
+    request<EvidenceRelationship>(`/lifecycle/evidence-relationships/${id}/`),
+
+  createEvidenceRelationship: (data: {
+    from_evidence: string;
+    to_evidence: string;
+    relationship_type: string;
+    confidence?: string;
+  }) =>
+    request<EvidenceRelationship>("/lifecycle/evidence-relationships/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Lifecycle Assessment API
+  listLifecycleAssessments: (params?: { domain?: string; classification?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.domain) queryParams.set("domain", params.domain);
+    if (params?.classification) queryParams.set("classification", params.classification);
+    const queryString = queryParams.toString();
+    return request<Paginated<LifecycleAssessment>>(
+      `/lifecycle/lifecycle-assessments/${queryString ? `?${queryString}` : ""}`
+    );
+  },
+
+  getLifecycleAssessment: (id: string) =>
+    request<LifecycleAssessment>(`/lifecycle/lifecycle-assessments/${id}/`),
+
+  getLatestLifecycleAssessment: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<LifecycleAssessment>(`/lifecycle/lifecycle-assessments/latest/?${queryParams.toString()}`);
+  },
 };

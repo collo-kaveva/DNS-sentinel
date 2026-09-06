@@ -94,3 +94,187 @@ export interface Paginated<T> {
   previous: string | null;
   results: T[];
 }
+
+// Audit types
+export type AuditEventType = 
+  | "LOGIN" 
+  | "LOGOUT" 
+  | "REGISTRATION" 
+  | "PASSWORD_CHANGE"
+  | "DOMAIN_CREATED" 
+  | "DOMAIN_DELETED" 
+  | "DOMAIN_UPDATED"
+  | "INVESTIGATION_STARTED" 
+  | "INVESTIGATION_COMPLETED" 
+  | "INVESTIGATION_FAILED"
+  | "ALERT_ACKNOWLEDGED" 
+  | "ALERT_RESOLVED" 
+  | "ALERT_REOPENED"
+  | "ANALYST_NOTE_CREATED" 
+  | "ANALYST_NOTE_UPDATED" 
+  | "ANALYST_NOTE_DELETED"
+  | "SETTINGS_UPDATED"
+  | "REPORT_GENERATED" 
+  | "REPORT_EXPORTED"
+  | "OTHER";
+
+export type AuditResult = "SUCCESS" | "FAILURE" | "PARTIAL";
+
+export interface AuditEvent {
+  id: string;
+  actor: number;
+  actor_username: string;
+  event_type: AuditEventType;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  resource_name: string;
+  result: AuditResult;
+  status_code: number | null;
+  ip_address: string | null;
+  user_agent: string;
+  metadata: Record<string, unknown>;
+  timestamp: string;
+}
+
+// Settings types
+export type DateFormat = "ISO_8601" | "US" | "EUROPEAN";
+export type TimeFormat = "24_HOUR" | "12_HOUR";
+export type MonitoringBehavior = "PASSIVE" | "ACTIVE";
+export type AlertSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH";
+
+export interface UserSettings {
+  date_format: DateFormat;
+  time_format: TimeFormat;
+  timezone: string;
+  auto_refresh: boolean;
+  refresh_interval_minutes: number;
+  default_monitoring_behavior: MonitoringBehavior;
+  email_alerts: boolean;
+  alert_severity_threshold: AlertSeverity;
+  session_timeout_minutes: number;
+  default_dashboard_view: string;
+  updated_at: string;
+}
+
+// Investigation types
+export type InvestigationStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "REOPENED";
+export type InvestigationPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export interface Investigation {
+  id: string;
+  domain: string;
+  domain_name: string;
+  owner: number;
+  title: string;
+  description: string;
+  status: InvestigationStatus;
+  priority: InvestigationPriority;
+  assigned_analyst: number | null;
+  assigned_analyst_username: string | null;
+  related_evidence: string[];
+  related_alerts: string[];
+  important_observations: string;
+  limitations: string;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+}
+
+export interface AnalystNote {
+  id: string;
+  investigation: string;
+  author: number;
+  author_username: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Evidence types
+export type EvidenceType = 
+  | "DNS_OBSERVATION" 
+  | "DNS_RECORD" 
+  | "IP_ADDRESS" 
+  | "CERTIFICATE" 
+  | "SERVICE" 
+  | "ASN" 
+  | "PROVIDER" 
+  | "ALERT" 
+  | "LIFECYCLE_ASSESSMENT" 
+  | "ANALYST_NOTE";
+
+export type EvidenceStatus = "OBSERVED" | "HISTORICAL" | "INFERRED" | "ANALYST" | "UNKNOWN";
+export type EvidenceConfidence = "HIGH" | "MEDIUM" | "LOW";
+
+export interface Evidence {
+  id: string;
+  domain: string;
+  evidence_type: EvidenceType;
+  status: EvidenceStatus;
+  confidence: EvidenceConfidence;
+  source: string;
+  collection_method: string;
+  observation: string;
+  entity_name: string;
+  entity_type: string;
+  related_object_id: string | null;
+  related_object_type: string;
+  metadata: Record<string, unknown>;
+  observed_at: string;
+  first_observed: string;
+  last_observed: string;
+}
+
+export interface EvidenceRelationship {
+  id: string;
+  from_evidence: string;
+  to_evidence: string;
+  from_evidence_details: Evidence;
+  to_evidence_details: Evidence;
+  relationship_type: string;
+  confidence: EvidenceConfidence;
+  observed_at: string;
+}
+
+// Lifecycle types
+export type LifecycleStatus = "ACTIVE" | "LEGACY" | "POTENTIALLY_ABANDONED" | "LIKELY_ABANDONED" | "UNKNOWN";
+
+export interface LifecycleAssessment {
+  id: string;
+  domain: string;
+  classification: LifecycleStatus;
+  confidence: number;
+  supporting_evidence: string[];
+  contradicting_evidence: string[];
+  model_version: string;
+  limitations: string;
+  explanation: string;
+  generated_at: string;
+}
+
+// Timeline types
+export type TimelineEventType = 
+  | "DNS_OBSERVATION" 
+  | "DNS_RECORD" 
+  | "IP_ADDRESS" 
+  | "DNS_FINDING" 
+  | "AUDIT_EVENT" 
+  | "INVESTIGATION" 
+  | "INVESTIGATION_STATUS_CHANGE" 
+  | "ANALYST_NOTE" 
+  | "LIFECYCLE_ASSESSMENT" 
+  | "INVESTIGATION_CREATED";
+
+export interface TimelineEvent {
+  event_id: string;
+  event_type: TimelineEventType;
+  timestamp: string;
+  asset: string;
+  description: string;
+  source: string;
+  previous_state: string | null;
+  new_state: string | null;
+  evidence_id: string | null;
+  metadata: Record<string, unknown>;
+}

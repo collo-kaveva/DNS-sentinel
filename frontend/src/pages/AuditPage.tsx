@@ -1,33 +1,51 @@
-import { useState } from "react";
-
-interface AuditEvent {
-  id: string;
-  timestamp: string;
-  user: string;
-  action: string;
-  resource: string;
-  result: "SUCCESS" | "FAILURE";
-  source?: string;
-  category: string;
-  status: string;
-}
+import { useState, useEffect } from "react";
+import { api, ApiError } from "../services/api";
+import type { AuditEvent as AuditEventType } from "../types";
 
 export default function AuditPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<AuditEventType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
-  const [userFilter, setUserFilter] = useState("");
-  const [actionFilter, setActionFilter] = useState("");
+  const [eventFilter, setEventFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [resultFilter, setResultFilter] = useState("");
+  const [auditEvents, setAuditEvents] = useState<AuditEventType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const loadAuditEvents = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listAuditEvents({
+        event_type: eventFilter || undefined,
+        resource_type: resourceFilter || undefined,
+        result: resultFilter || undefined,
+        date_from: dateRange.start || undefined,
+        date_to: dateRange.end || undefined,
+        page,
+      });
+      setAuditEvents(response.results);
+      setTotalCount(response.count);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load audit events");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAuditEvents();
+  }, [page, eventFilter, resourceFilter, resultFilter, dateRange]);
 
   const handleRefresh = () => {
     setError(null);
     setRefreshing(true);
-    // Audit log API is not yet available from the backend
-    setTimeout(() => setRefreshing(false), 500);
+    loadAuditEvents();
   };
 
   return (
@@ -53,61 +71,63 @@ export default function AuditPage() {
         </div>
 
         {/* Audit Filter Bar */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 flex flex-wrap items-center gap-3 opacity-50">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 flex flex-wrap items-center gap-3">
           <input
             className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm flex-1 min-w-[200px]"
             placeholder="Search audit events..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            disabled
           />
           <input
             type="date"
             className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm"
             value={dateRange.start}
             onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-            disabled
           />
           <input
             type="date"
             className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm"
             value={dateRange.end}
             onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-            disabled
-          />
-          <input
-            className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm w-32"
-            placeholder="User"
-            value={userFilter}
-            onChange={(e) => setUserFilter(e.target.value)}
-            disabled
           />
           <select
             className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            disabled
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value)}
           >
-            <option value="">All Actions</option>
+            <option value="">All Event Types</option>
+            <option value="LOGIN">Login</option>
+            <option value="LOGOUT">Logout</option>
+            <option value="REGISTRATION">Registration</option>
+            <option value="DOMAIN_CREATED">Domain Created</option>
+            <option value="DOMAIN_DELETED">Domain Deleted</option>
+            <option value="INVESTIGATION_STARTED">Investigation Started</option>
+            <option value="INVESTIGATION_COMPLETED">Investigation Completed</option>
+            <option value="SETTINGS_UPDATED">Settings Updated</option>
           </select>
           <select
             className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm"
             value={resourceFilter}
             onChange={(e) => setResourceFilter(e.target.value)}
-            disabled
           >
             <option value="">All Resources</option>
+            <option value="Domain">Domain</option>
+            <option value="Investigation">Investigation</option>
+            <option value="UserSettings">User Settings</option>
+            <option value="AnalystNote">Analyst Note</option>
           </select>
           <select
             className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            disabled
+            value={resultFilter}
+            onChange={(e) => setResultFilter(e.target.value)}
           >
-            <option value="">All Categories</option>
+            <option value="">All Results</option>
+            <option value="SUCCESS">Success</option>
+            <option value="FAILURE">Failure</option>
+            <option value="PARTIAL">Partial</option>
           </select>
           <div className="text-xs text-slate-500 ml-auto">
-            0 events
+            {totalCount} events
           </div>
         </div>
       </div>
@@ -120,22 +140,22 @@ export default function AuditPage() {
 
       {/* Audit Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 opacity-50">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-slate-300 mb-4">Activity Over Time</h3>
           <div className="h-32 flex items-center justify-center text-slate-600 text-sm">
-            Audit timeline not available
+            Timeline visualization coming soon
           </div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 opacity-50">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-slate-300 mb-4">Actions by Category</h3>
           <div className="h-32 flex items-center justify-center text-slate-600 text-sm">
-            Category breakdown not available
+            Category breakdown coming soon
           </div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 opacity-50">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-slate-300 mb-4">Success vs Failed</h3>
           <div className="h-32 flex items-center justify-center text-slate-600 text-sm">
-            Outcome distribution not available
+            Outcome distribution coming soon
           </div>
         </div>
       </div>
@@ -145,22 +165,47 @@ export default function AuditPage() {
         {/* Audit Event Stream */}
         <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-slate-300 mb-4">Event Stream</h3>
-          <div className="space-y-2 opacity-50">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-slate-800/30 border border-slate-700 rounded p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs text-slate-500">Timestamp</span>
-                  <span className="text-xs text-slate-400 ml-auto">Category</span>
+          {loading ? (
+            <div className="text-slate-500 text-sm">Loading audit events…</div>
+          ) : auditEvents.length === 0 ? (
+            <EmptyState 
+              message="No audit events available"
+              submessage="Audit events will appear here as you perform actions in the system."
+            />
+          ) : (
+            <div className="space-y-2">
+              {auditEvents.map((event) => (
+                <div 
+                  key={event.id} 
+                  className={`bg-slate-800/30 border rounded p-3 cursor-pointer transition-colors ${
+                    selectedEvent?.id === event.id 
+                      ? "border-accent bg-accent/5" 
+                      : "border-slate-700 hover:bg-slate-800/50"
+                  }`}
+                  onClick={() => setSelectedEvent(event)}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-slate-500">
+                      {new Date(event.timestamp).toLocaleString()}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded ml-auto ${
+                      event.result === "SUCCESS" ? "bg-emerald-500/15 text-emerald-400" :
+                      event.result === "FAILURE" ? "bg-rose-500/15 text-rose-400" :
+                      "bg-amber-500/15 text-amber-400"
+                    }`}>
+                      {event.result}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-400 mb-1">
+                    {event.action} by {event.actor_username}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {event.resource_type}: {event.resource_name || "N/A"}
+                  </div>
                 </div>
-                <div className="text-xs text-slate-400 mb-1">Action by user</div>
-                <div className="text-[10px] text-slate-500">Resource affected</div>
-              </div>
-            ))}
-          </div>
-          <EmptyState 
-            message="No audit events available"
-            submessage="Audit log tracking is not yet implemented in the backend."
-          />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Event Detail Panel */}
@@ -170,19 +215,27 @@ export default function AuditPage() {
             <div className="space-y-4">
               <div>
                 <div className="text-xs text-slate-500 mb-1">Timestamp</div>
-                <div className="text-sm text-slate-300">{selectedEvent.timestamp}</div>
+                <div className="text-sm text-slate-300">{new Date(selectedEvent.timestamp).toLocaleString()}</div>
               </div>
               <div>
-                <div className="text-xs text-slate-500 mb-1">User</div>
-                <div className="text-sm text-slate-300">{selectedEvent.user}</div>
+                <div className="text-xs text-slate-500 mb-1">Actor</div>
+                <div className="text-sm text-slate-300">{selectedEvent.actor_username}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-1">Event Type</div>
+                <div className="text-sm text-slate-300">{selectedEvent.event_type}</div>
               </div>
               <div>
                 <div className="text-xs text-slate-500 mb-1">Action</div>
                 <div className="text-sm text-slate-300">{selectedEvent.action}</div>
               </div>
               <div>
-                <div className="text-xs text-slate-500 mb-1">Resource</div>
-                <div className="text-sm text-slate-300">{selectedEvent.resource}</div>
+                <div className="text-xs text-slate-500 mb-1">Resource Type</div>
+                <div className="text-sm text-slate-300">{selectedEvent.resource_type || "N/A"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-1">Resource Name</div>
+                <div className="text-sm text-slate-300">{selectedEvent.resource_name || "N/A"}</div>
               </div>
               <div>
                 <div className="text-xs text-slate-500 mb-1">Result</div>
@@ -190,14 +243,16 @@ export default function AuditPage() {
                   {selectedEvent.result}
                 </div>
               </div>
-              <div>
-                <div className="text-xs text-slate-500 mb-1">Category</div>
-                <div className="text-sm text-slate-300">{selectedEvent.category}</div>
-              </div>
-              {selectedEvent.source && (
+              {selectedEvent.ip_address && (
                 <div>
-                  <div className="text-xs text-slate-500 mb-1">Source</div>
-                  <div className="text-sm text-slate-300">{selectedEvent.source}</div>
+                  <div className="text-xs text-slate-500 mb-1">IP Address</div>
+                  <div className="text-sm text-slate-300">{selectedEvent.ip_address}</div>
+                </div>
+              )}
+              {selectedEvent.user_agent && (
+                <div>
+                  <div className="text-xs text-slate-500 mb-1">User Agent</div>
+                  <div className="text-sm text-slate-300 truncate">{selectedEvent.user_agent}</div>
                 </div>
               )}
             </div>

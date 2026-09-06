@@ -1,19 +1,22 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, ApiError } from "../services/api";
-import type { Domain, ScanJob, DNSRecord, DNSObservation, DNSFinding, IPAddressInfo } from "../types";
+import type { Domain, ScanJob, DNSRecord, DNSObservation, DNSFinding, IPAddressInfo, Investigation, TimelineEvent, AnalystNote } from "../types";
 
 type InvestigationSection = "overview" | "timeline" | "evidence" | "dns" | "infrastructure" | "certificates" | "services" | "lifecycle" | "alerts" | "notes";
 
 export default function InvestigationPage() {
   const { id } = useParams<{ id: string }>();
   const [activeSection, setActiveSection] = useState<InvestigationSection>("overview");
+  const [investigation, setInvestigation] = useState<Investigation | null>(null);
   const [domain, setDomain] = useState<Domain | null>(null);
   const [jobs, setJobs] = useState<ScanJob[]>([]);
   const [dnsRecords, setDnsRecords] = useState<DNSRecord[]>([]);
   const [dnsObservations, setDnsObservations] = useState<DNSObservation[]>([]);
   const [dnsFindings, setDnsFindings] = useState<DNSFinding[]>([]);
   const [infrastructure, setInfrastructure] = useState<IPAddressInfo[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
+  const [analystNotes, setAnalystNotes] = useState<AnalystNote[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -24,11 +27,16 @@ export default function InvestigationPage() {
       setLoading(true);
       setError(null);
       try {
+        // Load investigation
+        const invData = await api.getInvestigation(id);
+        setInvestigation(invData);
+        
+        // Load domain data
         const [domainsRes] = await Promise.all([
           api.listDomains(),
         ]);
         
-        const foundDomain = domainsRes.results.find(d => d.id === id);
+        const foundDomain = domainsRes.results.find(d => d.id === invData.domain);
         if (!foundDomain) {
           setError("Domain not found");
           setLoading(false);
@@ -38,12 +46,14 @@ export default function InvestigationPage() {
         setDomain(foundDomain);
 
         // Load related data in parallel
-        const [jobsData, dnsRecordsData, dnsObservationsData, dnsFindingsData, infrastructureData] = await Promise.all([
-          api.jobs(id).catch(() => []),
-          api.dnsRecords(id).catch(() => []),
-          api.dnsObservations(id).catch(() => []),
-          api.dnsFindings(id).catch(() => []),
-          api.infrastructure(id).catch(() => []),
+        const [jobsData, dnsRecordsData, dnsObservationsData, dnsFindingsData, infrastructureData, timelineData, notesData] = await Promise.all([
+          api.jobs(invData.domain).catch(() => []),
+          api.dnsRecords(invData.domain).catch(() => []),
+          api.dnsObservations(invData.domain).catch(() => []),
+          api.dnsFindings(invData.domain).catch(() => []),
+          api.infrastructure(invData.domain).catch(() => []),
+          api.getInvestigationTimeline(id, 100).catch(() => ({ timeline: [] })),
+          api.listAnalystNotes({ investigation: id }).catch(() => ({ results: [] })),
         ]);
 
         setJobs(jobsData);
@@ -51,6 +61,8 @@ export default function InvestigationPage() {
         setDnsObservations(dnsObservationsData);
         setDnsFindings(dnsFindingsData);
         setInfrastructure(infrastructureData);
+        setTimeline(timelineData.timeline);
+        setAnalystNotes(notesData.results);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Failed to load investigation data");
       } finally {
@@ -80,7 +92,7 @@ export default function InvestigationPage() {
   }
 
   const latestJob = jobs[0];
-  const investigationStatus = latestJob?.status || "UNKNOWN";
+  const investigationStatus = investigation?.status || "UNKNOWN";
   const jobType = latestJob?.job_type || "UNKNOWN";
 
   return (
@@ -92,16 +104,16 @@ export default function InvestigationPage() {
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-xl font-semibold text-slate-100">{domain.name}</h1>
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                investigationStatus === "COMPLETED" ? "bg-emerald-500/15 text-emerald-400" :
-                investigationStatus === "RUNNING" ? "bg-amber-500/15 text-amber-400" :
-                investigationStatus === "FAILED" ? "bg-rose-500/15 text-rose-400" :
+                investigationStatus === "RESOLVED" || investigationStatus === "CLOSED" ? "bg-emerald-500/15 text-emerald-400" :
+                investigationStatus === "IN_PROGRESS" ? "bg-amber-500/15 text-amber-400" :
+                investigationStatus === "OPEN" || investigationStatus === "REOPENED" ? "bg-blue-500/15 text-blue-400" :
                 "bg-slate-500/15 text-slate-400"
               }`}>
                 {investigationStatus}
               </span>
             </div>
             <div className="text-sm text-slate-500">
-              Investigation ID: {id} • Job Type: {jobType}
+              {investigation ? `Investigation: ${investigation.title}` : `Investigation ID: ${id}`} • Latest Job: {jobType}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -215,7 +227,7 @@ export default function InvestigationPage() {
         {/* Center Content */}
         <main className="flex-1">
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-            {renderSection(activeSection, domain, jobs, dnsRecords, dnsObservations, dnsFindings, infrastructure)}
+            {renderSection(activeSection, domain, jobs, dnsRecords, dnsObservations, dnsFindings, infrastructure, timeline, analystNotes)}
           </div>
         </main>
 
@@ -233,8 +245,9 @@ export default function InvestigationPage() {
               <div>
                 <div className="text-xs text-slate-500 mb-1">Current Status</div>
                 <div className={`text-sm ${
-                  investigationStatus === "COMPLETED" ? "text-emerald-400" :
-                  investigationStatus === "RUNNING" ? "text-amber-400" :
+                  investigationStatus === "RESOLVED" || investigationStatus === "CLOSED" ? "text-emerald-400" :
+                  investigationStatus === "IN_PROGRESS" ? "text-amber-400" :
+                  investigationStatus === "OPEN" || investigationStatus === "REOPENED" ? "text-blue-400" :
                   "text-slate-400"
                 }`}>
                   {investigationStatus}
@@ -304,7 +317,9 @@ function renderSection(
   dnsRecords: DNSRecord[],
   dnsObservations: DNSObservation[],
   dnsFindings: DNSFinding[],
-  infrastructure: IPAddressInfo[]
+  infrastructure: IPAddressInfo[],
+  timeline: TimelineEvent[],
+  analystNotes: AnalystNote[]
 ) {
   switch (section) {
     case "overview":
@@ -374,47 +389,33 @@ function renderSection(
           <h2 className="text-lg font-semibold text-slate-100">Investigation Timeline</h2>
           
           <div className="space-y-4">
-            {jobs.length > 0 ? (
-              jobs.map(job => (
-                <div key={job.id} className="relative pl-6 pb-4 border-l-2 border-slate-700">
+            {timeline.length > 0 ? (
+              timeline.map((event, idx) => (
+                <div key={event.event_id} className="relative pl-6 pb-4 border-l-2 border-slate-700">
                   <div className={`absolute left-0 top-0 w-3 h-3 rounded-full ${
-                    job.status === "COMPLETED" ? "bg-emerald-500" :
-                    job.status === "RUNNING" ? "bg-amber-500" :
-                    job.status === "FAILED" ? "bg-rose-500" :
+                    event.event_type === "DNS_OBSERVATION" ? "bg-blue-500" :
+                    event.event_type === "DNS_RECORD" ? "bg-cyan-500" :
+                    event.event_type === "IP_ADDRESS" ? "bg-purple-500" :
+                    event.event_type === "AUDIT_EVENT" ? "bg-amber-500" :
+                    event.event_type === "INVESTIGATION" || event.event_type === "INVESTIGATION_CREATED" ? "bg-emerald-500" :
+                    event.event_type === "ANALYST_NOTE" ? "bg-rose-500" :
                     "bg-slate-500"
                   }`} style={{ transform: "translateX(-5px)" }} />
                   
-                  <div className="text-sm text-slate-300 mb-1">{job.job_type}</div>
+                  <div className="text-sm text-slate-300 mb-1">{event.event_type.replace(/_/g, " ")}</div>
                   <div className="text-xs text-slate-500 mb-2">
-                    {new Date(job.created_at).toLocaleString()}
+                    {new Date(event.timestamp).toLocaleString()}
                   </div>
                   
-                  <div className={`text-xs mb-2 ${
-                    job.status === "COMPLETED" ? "text-emerald-400" :
-                    job.status === "RUNNING" ? "text-amber-400" :
-                    job.status === "FAILED" ? "text-rose-400" :
-                    "text-slate-400"
-                  }`}>
-                    Status: {job.status}
+                  <div className="text-xs text-slate-400 mb-1">{event.description}</div>
+                  
+                  <div className="text-[10px] text-slate-500">
+                    Asset: {event.asset} • Source: {event.source}
                   </div>
-
-                  {job.error_message && (
-                    <div className="text-xs text-rose-400">{job.error_message}</div>
-                  )}
-
-                  {job.progress_steps.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {job.progress_steps.map((step, idx) => (
-                        <div key={idx} className="text-xs text-slate-500 flex items-center gap-2">
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            step.status === "COMPLETED" ? "bg-emerald-500" :
-                            step.status === "RUNNING" ? "bg-amber-500" :
-                            step.status === "FAILED" ? "bg-rose-500" :
-                            "bg-slate-600"
-                          }`} />
-                          {step.label}
-                        </div>
-                      ))}
+                  
+                  {event.new_state && (
+                    <div className="text-[10px] text-slate-400 mt-1">
+                      State: {event.new_state}
                     </div>
                   )}
                 </div>
@@ -570,8 +571,28 @@ function renderSection(
       return (
         <div className="space-y-6">
           <h2 className="text-lg font-semibold text-slate-100">Analyst Notes</h2>
-          <div className="text-sm text-slate-500">
-            Analyst notes are not yet implemented in the backend.
+          
+          <div className="space-y-4">
+            {analystNotes.length > 0 ? (
+              analystNotes.map(note => (
+                <div key={note.id} className="bg-slate-800/30 border border-slate-700 rounded p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm text-slate-300">{note.author_username}</div>
+                    <div className="text-xs text-slate-500">
+                      {new Date(note.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-sm text-slate-400 whitespace-pre-wrap">{note.content}</div>
+                  {note.updated_at !== note.created_at && (
+                    <div className="text-[10px] text-slate-500 mt-2">
+                      Updated: {new Date(note.updated_at).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-slate-500">No analyst notes yet.</div>
+            )}
           </div>
         </div>
       );
