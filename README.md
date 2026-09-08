@@ -1,11 +1,11 @@
-# The DNS Sentinel
+# The DNS Sentinel.
 
 **Public infrastructure intelligence & lifecycle classification platform**
 
 DNS Sentinel investigates *publicly observable* DNS, certificate, infrastructure,
 and service metadata for domains you are authorized to assess, and correlates
 that evidence into an explainable lifecycle classification
-(`ACTIVE` / `LEGACY` / `POTENTIALLY_ABANDONED` / `LIKELY_ABANDONED` / `UNKNOWN`).
+(`ACTIVE` / `LEGACY` / `POTENTIALLY_ABANDONED` / `LIKELY_ABANDONED` ).
 
 It never brute-forces credentials, bypasses authentication, exploits
 vulnerabilities, or performs destructive actions against target
