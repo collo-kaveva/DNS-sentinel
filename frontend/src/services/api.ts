@@ -1,7 +1,7 @@
 import type {
   User, Domain, ScanJob, DNSRecord, DNSObservation, DNSFinding, Paginated, IPAddressInfo,
   AuditEvent, UserSettings, Investigation, AnalystNote, Evidence, EvidenceRelationship,
-  LifecycleAssessment, TimelineEvent,
+  LifecycleAssessment, TimelineEvent, Certificate, CertificateObservation, Service, ServiceObservation, TimelineResponse,
 } from "../types";
 
 const BASE = "/api";
@@ -296,5 +296,182 @@ export const api = {
     const queryParams = new URLSearchParams();
     queryParams.set("domain_id", domain_id);
     return request<LifecycleAssessment>(`/lifecycle/lifecycle-assessments/latest/?${queryParams.toString()}`);
+  },
+
+  classifyDomain: (data: { domain_id: string }) =>
+    request<LifecycleAssessment>("/lifecycle/lifecycle-assessments/classify/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Certificate API
+  listCertificates: (params?: {
+    domain?: string;
+    issuer?: string;
+    is_valid?: string;
+    is_expired?: string;
+    expiring_before?: string;
+    expiring_after?: string;
+    date_from?: string;
+    date_to?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.domain) queryParams.set("domain", params.domain);
+    if (params?.issuer) queryParams.set("issuer", params.issuer);
+    if (params?.is_valid) queryParams.set("is_valid", params.is_valid);
+    if (params?.is_expired) queryParams.set("is_expired", params.is_expired);
+    if (params?.expiring_before) queryParams.set("expiring_before", params.expiring_before);
+    if (params?.expiring_after) queryParams.set("expiring_after", params.expiring_after);
+    if (params?.date_from) queryParams.set("date_from", params.date_from);
+    if (params?.date_to) queryParams.set("date_to", params.date_to);
+    const queryString = queryParams.toString();
+    return request<Paginated<Certificate>>(`/certificates/certificates/${queryString ? `?${queryString}` : ""}`);
+  },
+
+  getCertificate: (id: string) => request<Certificate>(`/certificates/certificates/${id}/`),
+
+  getCertificateHistory: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<Paginated<CertificateObservation>>(`/certificates/certificates/history/?${queryParams.toString()}`);
+  },
+
+  getCertificateStatus: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<{
+      domain_id: string;
+      domain_name: string;
+      has_certificate: boolean;
+      is_valid: boolean;
+      is_expired: boolean;
+      days_until_expiry: number | null;
+      issuer: string | null;
+      subject: string | null;
+      last_observed: string | null;
+    }>(`/certificates/certificates/status/?${queryParams.toString()}`);
+  },
+
+  getCertificateIssuerDistribution: () =>
+    request<{ issuer: string; count: number; percentage: number }[]>(
+      "/certificates/certificates/issuer_distribution/"
+    ),
+
+  getCertificateChanges: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<{
+      domain_id: string;
+      domain_name: string;
+      old_fingerprint: string;
+      new_fingerprint: string;
+      old_issuer: string;
+      new_issuer: string;
+      changed_at: string;
+    }[]>(`/certificates/certificates/changes/?${queryParams.toString()}`);
+  },
+
+  // Service API
+  listServices: (params?: {
+    domain?: string;
+    ip_address?: string;
+    port?: string;
+    protocol?: string;
+    service_type?: string;
+    is_available?: string;
+    date_from?: string;
+    date_to?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.domain) queryParams.set("domain", params.domain);
+    if (params?.ip_address) queryParams.set("ip_address", params.ip_address);
+    if (params?.port) queryParams.set("port", params.port);
+    if (params?.protocol) queryParams.set("protocol", params.protocol);
+    if (params?.service_type) queryParams.set("service_type", params.service_type);
+    if (params?.is_available) queryParams.set("is_available", params.is_available);
+    if (params?.date_from) queryParams.set("date_from", params.date_from);
+    if (params?.date_to) queryParams.set("date_to", params.date_to);
+    const queryString = queryParams.toString();
+    return request<Paginated<Service>>(`/services/services/${queryString ? `?${queryString}` : ""}`);
+  },
+
+  getService: (id: string) => request<Service>(`/services/services/${id}/`),
+
+  getServiceHistory: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<Paginated<ServiceObservation>>(`/services/services/history/?${queryParams.toString()}`);
+  },
+
+  getServiceAvailability: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<{
+      domain_id: string;
+      domain_name: string;
+      total_services: number;
+      available_services: number;
+      unavailable_services: number;
+      availability_percentage: number;
+    }>(`/services/services/availability/?${queryParams.toString()}`);
+  },
+
+  getServiceHTTPStatusDistribution: () =>
+    request<{ http_status: number; count: number; percentage: number }[]>(
+      "/services/services/http_status_distribution/"
+    ),
+
+  getServiceChanges: (domain_id: string) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", domain_id);
+    return request<{
+      domain_id: string;
+      domain_name: string;
+      ip_address: string;
+      port: number;
+      service_type: string;
+      old_status: boolean;
+      new_status: boolean;
+      changed_at: string;
+    }[]>(`/services/services/changes/?${queryParams.toString()}`);
+  },
+
+  // History API
+  getTimeline: (params: {
+    domain_id: string;
+    event_type?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+  }) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", params.domain_id);
+    if (params.event_type) queryParams.set("event_type", params.event_type);
+    if (params.date_from) queryParams.set("date_from", params.date_from);
+    if (params.date_to) queryParams.set("date_to", params.date_to);
+    if (params.limit) queryParams.set("limit", params.limit.toString());
+    return request<TimelineResponse>(`/lifecycle/history/timeline/?${queryParams.toString()}`);
+  },
+
+  getAssetHistory: (params: {
+    domain_id: string;
+    asset_type: string;
+    asset_identifier: string;
+    date_from?: string;
+    date_to?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    queryParams.set("domain_id", params.domain_id);
+    queryParams.set("asset_type", params.asset_type);
+    queryParams.set("asset_identifier", params.asset_identifier);
+    if (params.date_from) queryParams.set("date_from", params.date_from);
+    if (params.date_to) queryParams.set("date_to", params.date_to);
+    return request<{
+      domain_id: string;
+      domain_name: string;
+      asset_type: string;
+      asset_identifier: string;
+      history: Record<string, unknown>[];
+    }>(`/lifecycle/history/asset/?${queryParams.toString()}`);
   },
 };

@@ -2,12 +2,13 @@
 Views for the lifecycle app.
 """
 from django.db import models
-from rest_framework import viewsets, permissions, filters
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import Evidence, EvidenceRelationship, LifecycleAssessment
 from .serializers import EvidenceSerializer, EvidenceRelationshipSerializer, LifecycleAssessmentSerializer
+from .classification_engine import LifecycleClassificationEngine
 
 
 class EvidenceViewSet(viewsets.ModelViewSet):
@@ -208,3 +209,27 @@ class LifecycleAssessmentViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         except Exception as e:
             return Response({"detail": str(e)}, status=400)
+    
+    @action(detail=False, methods=["post"])
+    def classify(self, request):
+        """Trigger lifecycle classification for a domain."""
+        domain_id = request.data.get("domain_id")
+        if not domain_id:
+            return Response({"detail": "domain_id parameter is required"}, status=400)
+        
+        # Verify user owns the domain
+        from apps.dns_intelligence.models import Domain
+        try:
+            domain = Domain.objects.get(id=domain_id, owner=request.user)
+        except Domain.DoesNotExist:
+            return Response({"detail": "Domain not found"}, status=404)
+        
+        # Run classification
+        try:
+            classification_result = LifecycleClassificationEngine.classify_domain(domain)
+            assessment = LifecycleClassificationEngine.save_lifecycle_assessment(domain, classification_result)
+            
+            serializer = self.get_serializer(assessment)
+            return Response(serializer.data, status=201)
+        except Exception as e:
+            return Response({"detail": f"Classification failed: {str(e)}"}, status=400)

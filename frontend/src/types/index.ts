@@ -95,6 +95,140 @@ export interface Paginated<T> {
   results: T[];
 }
 
+// Certificate types
+export interface Certificate {
+  id: string;
+  domain: string;
+  domain_name: string;
+  subject: string;
+  issuer: string;
+  serial_number: string;
+  fingerprint: string;
+  fingerprint_sha256: string;
+  valid_from: string;
+  valid_until: string;
+  sans: string[];
+  public_key_algorithm: string;
+  public_key_size: number | null;
+  tls_version: string;
+  cipher_suite: string;
+  is_valid: boolean;
+  is_expired: boolean;
+  is_self_signed: boolean;
+  source: string;
+  collection_timestamp: string;
+  first_seen: string;
+  last_seen: string;
+  days_until_expiry: number | null;
+}
+
+export interface CertificateObservation {
+  id: string;
+  domain: string;
+  domain_name: string;
+  subject: string;
+  issuer: string;
+  serial_number: string;
+  fingerprint: string;
+  fingerprint_sha256: string;
+  valid_from: string;
+  valid_until: string;
+  sans: string[];
+  public_key_algorithm: string;
+  public_key_size: number | null;
+  tls_version: string;
+  cipher_suite: string;
+  is_valid: boolean;
+  is_expired: boolean;
+  is_self_signed: boolean;
+  source: string;
+  collection_method: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  observed_at: string;
+}
+
+// Service types
+export interface Service {
+  id: string;
+  domain: string;
+  domain_name: string;
+  ip_address: string;
+  port: number;
+  protocol: string;
+  service_type: string;
+  is_available: boolean;
+  http_status: number | null;
+  response_time_ms: number | null;
+  service_banner: string;
+  ssl_tls_enabled: boolean;
+  source: string;
+  collection_timestamp: string;
+  first_observed: string;
+  last_observed: string;
+}
+
+export interface ServiceObservation {
+  id: string;
+  domain: string;
+  domain_name: string;
+  ip_address: string;
+  port: number;
+  protocol: string;
+  service_type: string;
+  is_available: boolean;
+  http_status: number | null;
+  response_time_ms: number | null;
+  service_banner: string;
+  ssl_tls_enabled: boolean;
+  source: string;
+  collection_method: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  observed_at: string;
+}
+
+// Lifecycle types
+export type LifecycleClassification = 
+  | "ACTIVE" 
+  | "LEGACY" 
+  | "POTENTIALLY_ABANDONED" 
+  | "LIKELY_ABANDONED" 
+  | "UNKNOWN";
+
+export interface LifecycleAssessment {
+  id: string;
+  domain: string;
+  domain_name: string;
+  classification: LifecycleClassification;
+  confidence: number;
+  supporting_evidence: string[];
+  contradicting_evidence: string[];
+  model_version: string;
+  limitations: string;
+  explanation: string;
+  generated_at: string;
+}
+
+// History API types
+export interface TimelineEvent {
+  event_id: string;
+  event_type: string;
+  timestamp: string;
+  asset: string;
+  description: string;
+  source: string;
+  previous_state: string | null;
+  new_state: string | null;
+  evidence_id: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface TimelineResponse {
+  domain_id: string;
+  domain_name: string;
+  total_events: number;
+  events: TimelineEvent[];
+}
+
 // Audit types
 export type AuditEventType = 
   | "LOGIN" 

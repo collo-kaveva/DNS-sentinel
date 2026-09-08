@@ -4,8 +4,8 @@ Timeline service for aggregating historical events across all observation types.
 This service provides a unified timeline view by aggregating events from:
 - DNS observations and records
 - IP address observations
-- Certificate observations (when implemented)
-- Service observations (when implemented)
+- Certificate observations
+- Service observations
 - Audit events
 - Investigation events
 - Lifecycle assessments
@@ -28,6 +28,8 @@ from apps.infrastructure.models import IPAddress
 from apps.investigation.models import Investigation, AnalystNote
 from apps.lifecycle.models import Evidence, LifecycleAssessment
 from apps.accounts.models import AuditEvent
+from apps.certificates.models import Certificate, CertificateObservation
+from apps.services.models import Service, ServiceObservation
 
 
 class TimelineEvent:
@@ -300,6 +302,57 @@ class TimelineService:
                     "confidence": str(assessment.confidence),
                     "model_version": assessment.model_version,
                     "explanation": assessment.explanation,
+                }
+            ))
+        
+        # Get certificate observations
+        cert_observations = CertificateObservation.objects.filter(
+            domain_id=domain_id,
+            domain__owner_id=user_id
+        ).order_by('-observed_at')[:limit]
+        
+        for cert in cert_observations:
+            events.append(TimelineEvent(
+                event_id=str(cert.id),
+                event_type="CERTIFICATE",
+                timestamp=cert.observed_at.isoformat(),
+                asset=cert.subject,
+                description=f"Certificate from {cert.issuer} - {'Valid' if cert.is_valid else 'Invalid'}",
+                source=cert.source,
+                new_state="VALID" if cert.is_valid else "INVALID",
+                evidence_id=str(cert.id),
+                metadata={
+                    "issuer": cert.issuer,
+                    "valid_until": cert.valid_until.isoformat() if cert.valid_until else None,
+                    "is_expired": cert.is_expired,
+                    "sans": cert.sans,
+                    "confidence": cert.confidence,
+                }
+            ))
+        
+        # Get service observations
+        service_observations = ServiceObservation.objects.filter(
+            domain_id=domain_id,
+            domain__owner_id=user_id
+        ).order_by('-observed_at')[:limit]
+        
+        for service in service_observations:
+            events.append(TimelineEvent(
+                event_id=str(service.id),
+                event_type="SERVICE",
+                timestamp=service.observed_at.isoformat(),
+                asset=f"{service.service_type}://{service.ip_address}:{service.port}",
+                description=f"{service.service_type} service - {'Available' if service.is_available else 'Unavailable'}",
+                source=service.source,
+                new_state="AVAILABLE" if service.is_available else "UNAVAILABLE",
+                evidence_id=str(service.id),
+                metadata={
+                    "service_type": service.service_type,
+                    "port": service.port,
+                    "protocol": service.protocol,
+                    "http_status": service.http_status,
+                    "ssl_tls_enabled": service.ssl_tls_enabled,
+                    "confidence": service.confidence,
                 }
             ))
         

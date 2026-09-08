@@ -143,6 +143,103 @@ class EvidenceService:
         )
     
     @staticmethod
+    def create_from_certificate_observation(cert_observation, domain) -> Evidence:
+        """Create evidence from a certificate observation."""
+        status = EvidenceStatus.OBSERVED if cert_observation.is_valid else EvidenceStatus.HISTORICAL
+        if cert_observation.is_expired:
+            status = EvidenceStatus.HISTORICAL
+        
+        return Evidence.objects.create(
+            domain=domain,
+            owner=domain.owner,
+            evidence_type=EvidenceType.CERTIFICATE,
+            status=status,
+            confidence=Confidence.HIGH if cert_observation.confidence == "HIGH" else Confidence.MEDIUM,
+            source=cert_observation.source,
+            collection_method=cert_observation.collection_method or "TLS Handshake",
+            observation=f"Certificate from {cert_observation.issuer} for {cert_observation.subject}",
+            entity_name=cert_observation.subject,
+            entity_type="certificate",
+            related_object_id=cert_observation.id,
+            related_object_type="certificates.CertificateObservation",
+            metadata={
+                "issuer": cert_observation.issuer,
+                "subject": cert_observation.subject,
+                "serial_number": cert_observation.serial_number,
+                "fingerprint_sha256": cert_observation.fingerprint_sha256,
+                "valid_from": cert_observation.valid_from.isoformat() if cert_observation.valid_from else None,
+                "valid_until": cert_observation.valid_until.isoformat() if cert_observation.valid_until else None,
+                "sans": cert_observation.sans,
+                "is_valid": cert_observation.is_valid,
+                "is_expired": cert_observation.is_expired,
+                "is_self_signed": cert_observation.is_self_signed,
+                "public_key_algorithm": cert_observation.public_key_algorithm,
+                "public_key_size": cert_observation.public_key_size,
+            },
+            observed_at=cert_observation.observed_at,
+        )
+    
+    @staticmethod
+    def create_from_service_observation(service_observation, domain) -> Evidence:
+        """Create evidence from a service observation."""
+        status = EvidenceStatus.OBSERVED if service_observation.is_available else EvidenceStatus.HISTORICAL
+        
+        return Evidence.objects.create(
+            domain=domain,
+            owner=domain.owner,
+            evidence_type=EvidenceType.SERVICE,
+            status=status,
+            confidence=Confidence.MEDIUM if service_observation.confidence == "HIGH" else Confidence.LOW,
+            source=service_observation.source,
+            collection_method=service_observation.collection_method or "Service Observation",
+            observation=f"{service_observation.service_type} service at {service_observation.ip_address}:{service_observation.port} - {'Available' if service_observation.is_available else 'Unavailable'}",
+            entity_name=f"{service_observation.service_type}://{service_observation.ip_address}:{service_observation.port}",
+            entity_type="service",
+            related_object_id=service_observation.id,
+            related_object_type="services.ServiceObservation",
+            metadata={
+                "service_type": service_observation.service_type,
+                "ip_address": service_observation.ip_address,
+                "port": service_observation.port,
+                "protocol": service_observation.protocol,
+                "is_available": service_observation.is_available,
+                "http_status": service_observation.http_status,
+                "response_time_ms": service_observation.response_time_ms,
+                "ssl_tls_enabled": service_observation.ssl_tls_enabled,
+                "service_banner": service_observation.service_banner,
+            },
+            observed_at=service_observation.observed_at,
+        )
+    
+    @staticmethod
+    def create_from_lifecycle_assessment(assessment, domain) -> Evidence:
+        """Create evidence from a lifecycle assessment."""
+        return Evidence.objects.create(
+            domain=domain,
+            owner=domain.owner,
+            evidence_type=EvidenceType.LIFECYCLE_ASSESSMENT,
+            status=EvidenceStatus.ANALYST,
+            confidence=Confidence.HIGH if assessment.confidence >= 0.75 else Confidence.MEDIUM,
+            source="Lifecycle Engine",
+            collection_method="Rule-based Classification",
+            observation=f"Lifecycle classification: {assessment.classification} (confidence: {assessment.confidence})",
+            entity_name=domain.name,
+            entity_type="domain",
+            related_object_id=assessment.id,
+            related_object_type="lifecycle.LifecycleAssessment",
+            metadata={
+                "classification": assessment.classification,
+                "confidence": str(assessment.confidence),
+                "model_version": assessment.model_version,
+                "supporting_evidence": assessment.supporting_evidence,
+                "contradicting_evidence": assessment.contradicting_evidence,
+                "limitations": assessment.limitations,
+                "explanation": assessment.explanation,
+            },
+            observed_at=assessment.generated_at,
+        )
+    
+    @staticmethod
     def get_evidence_for_domain(domain_id: str, evidence_type: Optional[str] = None) -> List[Evidence]:
         """Get all evidence for a domain, optionally filtered by type."""
         queryset = Evidence.objects.filter(domain_id=domain_id)
@@ -177,17 +274,21 @@ def sync_domain_evidence(domain) -> Dict[str, int]:
     Sync all existing observations for a domain into the evidence system.
     
     This creates evidence items from existing DNS records, DNS observations,
-    and IP addresses, and establishes relationships between them.
+    IP addresses, certificates, services, and establishes relationships between them.
     
     Returns a summary of what was created.
     """
     from apps.dns_intelligence.models import DNSRecord, DNSObservation
     from apps.infrastructure.models import IPAddress
+    from apps.certificates.models import CertificateObservation
+    from apps.services.models import ServiceObservation
     
     summary = {
         "dns_records": 0,
         "dns_observations": 0,
         "ip_addresses": 0,
+        "certificates": 0,
+        "services": 0,
         "relationships": 0,
     }
     
@@ -210,6 +311,18 @@ def sync_domain_evidence(domain) -> Dict[str, int]:
         ip_evidence = EvidenceService.create_from_ip_address(ip, domain)
         ip_evidence_map[str(ip.id)] = ip_evidence
         summary["ip_addresses"] += 1
+    
+    # Create evidence from certificate observations
+    cert_observations = CertificateObservation.objects.filter(domain=domain)
+    for cert in cert_observations:
+        EvidenceService.create_from_certificate_observation(cert, domain)
+        summary["certificates"] += 1
+    
+    # Create evidence from service observations
+    service_observations = ServiceObservation.objects.filter(domain=domain)
+    for service in service_observations:
+        EvidenceService.create_from_service_observation(service, domain)
+        summary["services"] += 1
     
     # Create relationships between domain and IPs
     domain_evidence = Evidence.objects.filter(
