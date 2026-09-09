@@ -51,7 +51,7 @@ fake data — see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the phase-by-phase
 plan to complete them, matching the spec's own "Implementation Priority"
 phases.
 
-## Project structure
+## The Project structure
 
 ```
 dns-sentinel/
