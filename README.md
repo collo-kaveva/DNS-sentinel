@@ -53,7 +53,7 @@ This repository ships a **complete, working vertical slice**, not a mockup:
 
 The platform now provides complete end-to-end functionality for monitoring, change detection, alerting, and reporting, all built on the existing evidence-based architecture with proper security controls and provenance tracking.
 
-## Project structure
+## The Project structure
 
 ```
 dns-sentinel/
