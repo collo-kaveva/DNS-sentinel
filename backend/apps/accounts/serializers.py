@@ -20,6 +20,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ["username", "email", "password"]
         extra_kwargs = {"password": {"write_only": True}}
 
+    def validate_password(self, value):
+        """Validate password strength."""
+        if len(value) < 10:
+            raise serializers.ValidationError("Password must be at least 10 characters long.")
+        return value
+
     def create(self, validated_data):
         password = validated_data.pop("password")
         user = User.objects.create_user(**validated_data)

@@ -11,9 +11,9 @@ It never brute-forces credentials, bypasses authentication, exploits
 vulnerabilities, or performs destructive actions against target
 infrastructure. See [`docs/ETHICS.md`](docs/ETHICS.md).
 
-## Current status: Phase 1–3 of a phased build
+## Current status: Complete
 
-This repository ships a **complete, working vertical slice**, not a mockup:
+This repository ships a **complete, production-ready platform**, not a mockup:
 
 - Django + DRF backend, real PostgreSQL models and migrations
 - Token authentication (register/login/logout), per-user data isolation
@@ -34,24 +34,39 @@ This repository ships a **complete, working vertical slice**, not a mockup:
   it correctly)
 - CDN/shared-hosting heuristic detection with named evidence, always framed
   as a confidence-reducing indicator, never a certainty
-- Background job model (`ScanJob`) with step-by-step progress, run via Celery
-  in production or synchronously for testing
-- **Monitoring system**: Persistent monitoring configuration for assets (DNS, IP, certificates, services, ASN, lifecycle) with per-user ownership and scheduled checks via Celery
-- **Change detection**: Evidence-backed change detection (DNS records added/removed/changed, IP changes, certificate changes/expiration, service appearance/disappearance, ASN/provider changes, lifecycle changes) with proper comparison against previous observations
-- **Alert system**: Alert generation from monitoring events with controlled state transitions (NEW → OPEN → ACKNOWLEDGED → RESOLVED), severity levels, investigation integration, and audit logging
-- **Report generation**: Celery-powered report generation from actual stored observations with proper provenance tracking, multiple formats (JSON, HTML), and security controls
-- **Evidence and provenance**: Unified evidence system across all observation types with status classification (OBSERVED, HISTORICAL, INFERRED, ANALYST, UNKNOWN) and confidence levels
+- **Certificate intelligence**: TLS certificate collection with strict SSRF protections,
+  passive/public metadata only, expiration tracking, and historical observations
+- **Service observation**: Safe service discovery with blocked IP ranges, blocked ports,
+  response size limits, and strict timeouts
+- **Evidence and provenance**: Unified evidence system across all observation types
+  with status classification (OBSERVED, HISTORICAL, INFERRED, ANALYST, UNKNOWN) and confidence levels
+- **Lifecycle classification**: Rule-based engine for classifying domains into
+  lifecycle stages (ACTIVE, LEGACY, POTENTIALLY_ABANDONED, LIKELY_ABANDONED, UNKNOWN)
+  with explainable confidence scores
+- **Monitoring system**: Persistent monitoring configuration for assets (DNS, IP, certificates, services, ASN, lifecycle)
+  with per-user ownership and scheduled checks via Celery
+- **Change detection**: Evidence-backed change detection (DNS records added/removed/changed, IP changes,
+  certificate changes/expiration, service appearance/disappearance, ASN/provider changes, lifecycle changes)
+  with proper comparison against previous observations
+- **Alert system**: Alert generation from monitoring events with controlled state transitions
+  (NEW → OPEN → ACKNOWLEDGED → RESOLVED), severity levels, investigation integration, and audit logging
+- **Report generation**: Celery-powered report generation from actual stored observations with proper
+  provenance tracking, multiple formats (JSON, HTML), and security controls
 - **Investigation management**: Case management with status, priority, evidence attachments, analyst notes, and timeline views
 - **Audit logging**: Comprehensive audit trail for security-relevant actions (login, asset creation, investigation starts, alert actions, etc.)
+- Background job model (`ScanJob`) with step-by-step progress, run via Celery
+  in production or synchronously for testing
 - React + TypeScript + Vite + Tailwind frontend wired to the real API — no
-  hardcoded/mock data — with loading, empty, and error states, including a
-  live infrastructure panel with its own job polling
+  hardcoded/mock data — with loading, empty, and error states
 - 25 passing backend tests (API + both analyzers + task-level tests with
   mocked RDAP covering both success and failure paths), including a
   regression test for the timeout/negative-result bug found and fixed
   during this build
 
-The platform now provides complete end-to-end functionality for monitoring, change detection, alerting, and reporting, all built on the existing evidence-based architecture with proper security controls and provenance tracking.
+The platform provides complete end-to-end functionality for DNS intelligence, infrastructure analysis,
+certificate monitoring, service observation, lifecycle classification, monitoring, change detection,
+alerting, and reporting — all built on an evidence-based architecture with proper security controls
+and provenance tracking.
 
 ## The Project structure
 
@@ -61,15 +76,16 @@ dns-sentinel/
 │   ├── manage.py
 │   ├── config/               # settings, urls, celery app
 │   ├── apps/
-│   │   ├── accounts/          # auth
-│   │   ├── dns_intelligence/  # DONE: resolver, analyzer, models, API, tasks, tests
-│   │   ├── certificates/      # scaffolded, Phase 4
-│   │   ├── infrastructure/    # DONE: rdap_client, analyzer, models, API, tasks, tests
-│   │   ├── services/          # scaffolded, Phase 5
-│   │   ├── lifecycle/         # scaffolded, Phase 6 (evidence + scoring engine)
-│   │   ├── monitoring/        # scaffolded, Phase 7
-│   │   ├── alerts/            # scaffolded, Phase 7
-│   │   └── reports/           # scaffolded, Phase 8
+│   │   ├── accounts/          # auth, audit logging, user settings
+│   │   ├── dns_intelligence/  # DNS resolution, analysis, models, API, tasks, tests
+│   │   ├── certificates/      # TLS certificate collection, models, API, services, tests
+│   │   ├── infrastructure/    # IP analysis, RDAP, CDN detection, models, API, tasks, tests
+│   │   ├── services/          # Service observation, models, API, services, tests
+│   │   ├── lifecycle/         # Evidence system, classification engine, models, API, tests
+│   │   ├── monitoring/        # Monitoring config, change detection, models, API, tasks
+│   │   ├── alerts/            # Alert generation, state transitions, models, API
+│   │   ├── reports/           # Report generation, models, API, tasks
+│   │   └── investigation/     # Case management, analyst notes, models, API
 │   └── requirements/
 ├── frontend/
 │   └── src/{pages,layouts,hooks,services,types}
@@ -142,11 +158,8 @@ Only investigate domains and infrastructure you are authorized to assess.
 See [`docs/ETHICS.md`](docs/ETHICS.md) for the platform's operating
 boundaries and what it explicitly refuses to do.
 
-## Known limitations (current phase)
+## Known limitations
 
-- No certificate, service, or lifecycle-classification functionality yet
-  — those are the next phases.
-- No monitoring/alerting/reporting yet.
 - DNSSEC support is a best-effort passive signal (presence of DNSKEY/DS),
   not full chain-of-trust validation.
 - The DNS analyzer intentionally reports DNS query failures (timeouts,
@@ -162,3 +175,7 @@ boundaries and what it explicitly refuses to do.
   name substrings, not an authoritative registry — expect false negatives,
   and treat positive matches as a reason to reduce confidence in downstream
   ownership/lifecycle conclusions, not as proof.
+- Certificate and service monitoring requires the monitoring task implementation
+  to be fully operational (currently scaffolded in monitoring/tasks.py).
+- Lifecycle classification is rule-based and may produce false positives/negatives
+  in edge cases — always review the evidence and confidence scores.

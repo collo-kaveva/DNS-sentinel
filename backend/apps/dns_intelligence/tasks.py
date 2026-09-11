@@ -23,8 +23,8 @@ def _mark_step(job: ScanJob, label: str, status: str):
     job.save(update_fields=["progress_steps"])
 
 
-@shared_task
-def run_dns_discovery_and_analysis(job_id: str):
+@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+def run_dns_discovery_and_analysis(self, job_id: str):
     job = ScanJob.objects.select_related("domain").get(id=job_id)
     domain = job.domain
 
@@ -89,4 +89,4 @@ def run_dns_discovery_and_analysis(job_id: str):
         job.error_message = str(exc)
         job.finished_at = timezone.now()
         job.save(update_fields=["status", "error_message", "finished_at"])
-        raise
+        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))

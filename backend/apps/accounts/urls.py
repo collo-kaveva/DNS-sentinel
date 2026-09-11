@@ -11,4 +11,5 @@ urlpatterns = [
     path("logout/", views.LogoutView.as_view(), name="logout"),
     path("me/", views.MeView.as_view(), name="me"),
     path("settings/", views.UserSettingsView.as_view(), name="settings"),
+    path("dashboard/", views.DashboardAPIView.as_view(), name="dashboard"),
 ] + router.urls

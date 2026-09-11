@@ -69,6 +69,22 @@ export const api = {
 
   me: () => request<User>("/auth/me/"),
 
+  getDashboard: () =>
+    request<{
+      domains: { total: number; authorized: number; unauthorized: number };
+      findings: { high: number; medium: number; low: number; info: number; total: number };
+      infrastructure: { total_ips: number; current_ips: number; cdn_detected: number };
+      lifecycle: {
+        ACTIVE: number;
+        LEGACY: number;
+        POTENTIALLY_ABANDONED: number;
+        LIKELY_ABANDONED: number;
+        UNKNOWN: number;
+      };
+      monitoring: { recent_changes: number; total_alerts: number; open_alerts: number };
+      attention_required: boolean;
+    }>("/auth/dashboard/"),
+
   listDomains: () => request<Paginated<Domain>>("/domains/"),
 
   createDomain: (data: { name: string; notes?: string; authorized: boolean }) =>

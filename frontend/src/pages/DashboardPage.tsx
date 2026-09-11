@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../services/api";
-import type { Domain, DNSFinding, IPAddressInfo, ScanJob } from "../types";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip
@@ -17,10 +16,7 @@ const COLORS = {
 };
 
 export default function DashboardPage() {
-  const [domains, setDomains] = useState<Domain[] | null>(null);
-  const [allFindings, setAllFindings] = useState<DNSFinding[]>([]);
-  const [allIpAddresses, setAllIpAddresses] = useState<IPAddressInfo[]>([]);
-  const [recentJobs, setRecentJobs] = useState<ScanJob[]>([]);
+  const [dashboardData, setDashboardData] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,31 +25,8 @@ export default function DashboardPage() {
     setError(null);
     setRefreshing(true);
     try {
-      const [domainsRes] = await Promise.all([
-        api.listDomains(),
-      ]);
-      setDomains(domainsRes.results);
-
-      // Load findings, IPs, and jobs for each domain
-      const findingsPromises = domainsRes.results.map(d => 
-        api.dnsFindings(d.id).catch(() => [])
-      );
-      const ipPromises = domainsRes.results.map(d => 
-        api.infrastructure(d.id).catch(() => [])
-      );
-      const jobsPromises = domainsRes.results.map(d => 
-        api.jobs(d.id).catch(() => [])
-      );
-
-      const [findingsResults, ipResults, jobsResults] = await Promise.all([
-        Promise.all(findingsPromises),
-        Promise.all(ipPromises),
-        Promise.all(jobsPromises),
-      ]);
-
-      setAllFindings(findingsResults.flat());
-      setAllIpAddresses(ipResults.flat());
-      setRecentJobs(jobsResults.flat().slice(0, 10));
+      const data = await api.getDashboard();
+      setDashboardData(data);
       setLastUpdate(new Date());
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load dashboard data");
@@ -66,21 +39,29 @@ export default function DashboardPage() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  const totalAssets = domains?.length ?? 0;
-  const authorizedAssets = domains?.filter((d) => d.authorized).length ?? 0;
-  const unauthorizedAssets = totalAssets - authorizedAssets;
-  const highSeverityFindings = allFindings.filter(f => f.severity === "HIGH").length;
-  const assetsRequiringInvestigation = highSeverityFindings > 0 ? domains?.filter(d => 
-    allFindings.some(f => f.severity === "HIGH" && d.id === f.id.substring(0, 36))
-  ).length ?? 0 : 0;
+  const totalAssets = dashboardData?.domains?.total ?? 0;
+  const authorizedAssets = dashboardData?.domains?.authorized ?? 0;
+  const unauthorizedAssets = dashboardData?.domains?.unauthorized ?? 0;
+  const highSeverityFindings = dashboardData?.findings?.high ?? 0;
+  const mediumSeverityFindings = dashboardData?.findings?.medium ?? 0;
+  const lowSeverityFindings = dashboardData?.findings?.low ?? 0;
+  const infoSeverityFindings = dashboardData?.findings?.info ?? 0;
+  const totalFindings = dashboardData?.findings?.total ?? 0;
 
   // Infrastructure activity counts
-  const ipCount = allIpAddresses.length;
-  const currentIpCount = allIpAddresses.filter(ip => ip.association_status === "CURRENT").length;
-  const cdnCount = allIpAddresses.filter(ip => ip.is_likely_cdn).length;
+  const ipCount = dashboardData?.infrastructure?.total_ips ?? 0;
+  const currentIpCount = dashboardData?.infrastructure?.current_ips ?? 0;
+  const cdnCount = dashboardData?.infrastructure?.cdn_detected ?? 0;
 
-  // Recent activity from jobs
-  const recentActivity = recentJobs.slice(0, 5);
+  // Lifecycle data
+  const lifecycleData = dashboardData?.lifecycle ?? {};
+  const lifecycleTotal = Object.values(lifecycleData).reduce((sum: number, val: any) => sum + (val as number), 0);
+
+  // Monitoring data
+  const recentChanges = dashboardData?.monitoring?.recent_changes ?? 0;
+  const totalAlerts = dashboardData?.monitoring?.total_alerts ?? 0;
+  const openAlerts = dashboardData?.monitoring?.open_alerts ?? 0;
+  const attentionRequired = dashboardData?.attention_required ?? false;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -114,11 +95,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {domains === null && !error && (
+      {dashboardData === null && !error && (
         <div className="text-slate-500 text-sm">Loading dashboard data…</div>
       )}
 
-      {domains !== null && (
+      {dashboardData !== null && (
         <>
           {/* Security Metrics Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
@@ -165,7 +146,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Assets Requiring Investigation */}
-          {highSeverityFindings > 0 && (
+          {attentionRequired && (
             <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-4 mb-8">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-rose-400">Attention Required</h3>
@@ -174,7 +155,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <div className="text-xs text-rose-300">
-                {highSeverityFindings} high-severity finding(s) across {assetsRequiringInvestigation} asset(s) require investigation.
+                {highSeverityFindings} high-severity finding(s) require investigation.
               </div>
             </div>
           )}
@@ -183,15 +164,15 @@ export default function DashboardPage() {
             {/* Findings by Severity */}
             <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">DNS Findings by Severity</h3>
-              {allFindings.length > 0 ? (
+              {totalFindings > 0 ? (
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
                     <Pie
                       data={[
-                        { name: "HIGH", value: allFindings.filter(f => f.severity === "HIGH").length },
-                        { name: "MEDIUM", value: allFindings.filter(f => f.severity === "MEDIUM").length },
-                        { name: "LOW", value: allFindings.filter(f => f.severity === "LOW").length },
-                        { name: "INFO", value: allFindings.filter(f => f.severity === "INFO").length },
+                        { name: "HIGH", value: highSeverityFindings },
+                        { name: "MEDIUM", value: mediumSeverityFindings },
+                        { name: "LOW", value: lowSeverityFindings },
+                        { name: "INFO", value: infoSeverityFindings },
                       ].filter(d => d.value > 0)}
                       cx="50%"
                       cy="50%"
@@ -222,14 +203,12 @@ export default function DashboardPage() {
             {/* IP Association Status */}
             <div className="bg-slate-900 border border-slate-800 rounded-lg p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-4">IP Association Status</h3>
-              {allIpAddresses.length > 0 ? (
+              {ipCount > 0 ? (
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart
                     data={[
-                      { name: "Current", value: allIpAddresses.filter(ip => ip.association_status === "CURRENT").length },
-                      { name: "Historical", value: allIpAddresses.filter(ip => ip.association_status === "HISTORICAL").length },
-                      { name: "Estimated", value: allIpAddresses.filter(ip => ip.association_status === "ESTIMATED").length },
-                      { name: "Unknown", value: allIpAddresses.filter(ip => ip.association_status === "UNKNOWN").length },
+                      { name: "Current", value: currentIpCount },
+                      { name: "Historical", value: ipCount - currentIpCount },
                     ].filter(d => d.value > 0)}
                     layout="vertical"
                     margin={{ left: 60, right: 20, top: 5, bottom: 5 }}
@@ -250,28 +229,70 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Lifecycle Distribution - Not Yet Available */}
+          {/* Lifecycle Distribution */}
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 mb-8">
             <h3 className="text-sm font-semibold text-slate-300 mb-4">Lifecycle Distribution</h3>
-            <EmptyState 
-              message="Lifecycle classification is not yet implemented"
-              submessage="This feature will be available in a future phase. See docs/ROADMAP.md for details."
-            />
+            {lifecycleTotal > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: "ACTIVE", value: lifecycleData.ACTIVE || 0 },
+                      { name: "LEGACY", value: lifecycleData.LEGACY || 0 },
+                      { name: "POTENTIALLY_ABANDONED", value: lifecycleData.POTENTIALLY_ABANDONED || 0 },
+                      { name: "LIKELY_ABANDONED", value: lifecycleData.LIKELY_ABANDONED || 0 },
+                      { name: "UNKNOWN", value: lifecycleData.UNKNOWN || 0 },
+                    ].filter(d => d.value > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    <Cell fill={COLORS.emerald} />
+                    <Cell fill={COLORS.amber} />
+                    <Cell fill={COLORS.orange} />
+                    <Cell fill={COLORS.rose} />
+                    <Cell fill={COLORS.slate} />
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px" }}
+                    itemStyle={{ color: "#e2e8f0" }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: "12px", color: "#94a3b8" }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState message="No lifecycle classification data available" />
+            )}
           </div>
 
-          {/* Lifecycle Trend - Not Yet Available */}
+          {/* Monitoring & Alerts */}
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 mb-8">
-            <h3 className="text-sm font-semibold text-slate-300 mb-4">Lifecycle Trend Over Time</h3>
-            <EmptyState 
-              message="Lifecycle trend data is not yet available"
-              submessage="This feature will be available in a future phase. See docs/ROADMAP.md for details."
-            />
+            <h3 className="text-sm font-semibold text-slate-300 mb-4">Monitoring & Alerts</h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400 py-2 border-b border-slate-800">
+                <span>Total changes detected</span>
+                <span className="text-slate-200">{recentChanges}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-400 py-2 border-b border-slate-800">
+                <span>Total alerts</span>
+                <span className="text-slate-200">{totalAlerts}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-400 py-2">
+                <span>Open alerts</span>
+                <span className="text-rose-400">{openAlerts}</span>
+              </div>
+            </div>
           </div>
 
           {/* Infrastructure Activity */}
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 mb-8">
             <h3 className="text-sm font-semibold text-slate-300 mb-4">Infrastructure Activity</h3>
-            {allIpAddresses.length > 0 ? (
+            {ipCount > 0 ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-slate-400 py-2 border-b border-slate-800">
                   <span>Total IP addresses observed</span>
@@ -285,40 +306,9 @@ export default function DashboardPage() {
                   <span>CDN/Proxy indicators detected</span>
                   <span className="text-amber-400">{cdnCount}</span>
                 </div>
-                <div className="flex items-center justify-between text-xs text-slate-400 py-2">
-                  <span>Shared hosting indicators</span>
-                  <span className="text-slate-200">{allIpAddresses.filter(ip => ip.is_likely_shared_hosting).length}</span>
-                </div>
               </div>
             ) : (
               <EmptyState message="No infrastructure activity data available" />
-            )}
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 mb-8">
-            <h3 className="text-sm font-semibold text-slate-300 mb-4">Recent Activity</h3>
-            {recentActivity.length > 0 ? (
-              <div className="space-y-3">
-                {recentActivity.map((job) => (
-                  <div key={job.id} className="flex items-start gap-3 text-xs py-2 border-b border-slate-800 last:border-0">
-                    <div className={`w-2 h-2 rounded-full mt-1.5 ${
-                      job.status === "COMPLETED" ? "bg-emerald-500" :
-                      job.status === "FAILED" ? "bg-rose-500" :
-                      job.status === "RUNNING" ? "bg-amber-500" :
-                      "bg-slate-500"
-                    }`} />
-                    <div className="flex-1">
-                      <div className="text-slate-300">{job.job_type.replace(/_/g, " ")}</div>
-                      <div className="text-slate-500 mt-0.5">
-                        {new Date(job.created_at).toLocaleString()} · {job.status}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState message="No recent activity" />
             )}
           </div>
 
