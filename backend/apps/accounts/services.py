@@ -268,6 +268,63 @@ class AuditService:
         )
     
     @staticmethod
+    def log_alert_reopened(user: User, alert_id: str, ip_address: Optional[str] = None) -> AuditEvent:
+        """Log an alert reopen event."""
+        return AuditService.log_event(
+            actor=user,
+            event_type=AuditEvent.EventType.ALERT_REOPENED,
+            action=f"Alert '{alert_id}' reopened",
+            resource_type="Alert",
+            resource_id=alert_id,
+            result=AuditEvent.ActionResult.SUCCESS,
+            ip_address=ip_address,
+        )
+    
+    @staticmethod
+    def log_alert_assigned(user: User, alert, analyst_id: Optional[int] = None, ip_address: Optional[str] = None) -> AuditEvent:
+        """Log an alert assignment event."""
+        action_text = f"Alert '{alert.id}' assigned"
+        if analyst_id:
+            action_text += f" to analyst {analyst_id}"
+        else:
+            action_text += " unassigned"
+        
+        return AuditService.log_event(
+            actor=user,
+            event_type=AuditEvent.EventType.OTHER,
+            action=action_text,
+            resource_type="Alert",
+            resource_id=str(alert.id),
+            resource_name=alert.title,
+            result=AuditEvent.ActionResult.SUCCESS,
+            ip_address=ip_address,
+            metadata={"analyst_id": analyst_id},
+        )
+    
+    @staticmethod
+    def log_alert_action(user: User, alert, new_status: str, notes: str = "", ip_address: Optional[str] = None) -> AuditEvent:
+        """Log a generic alert action event."""
+        event_type_map = {
+            "ACKNOWLEDGED": AuditEvent.EventType.ALERT_ACKNOWLEDGED,
+            "RESOLVED": AuditEvent.EventType.ALERT_RESOLVED,
+            "REOPENED": AuditEvent.EventType.ALERT_REOPENED,
+        }
+        
+        event_type = event_type_map.get(new_status, AuditEvent.EventType.OTHER)
+        
+        return AuditService.log_event(
+            actor=user,
+            event_type=event_type,
+            action=f"Alert '{alert.id}' status changed to {new_status}",
+            resource_type="Alert",
+            resource_id=str(alert.id),
+            resource_name=alert.title,
+            result=AuditEvent.ActionResult.SUCCESS,
+            ip_address=ip_address,
+            metadata={"new_status": new_status, "notes": notes},
+        )
+    
+    @staticmethod
     def log_report_generated(user: User, report_id: str, report_title: str, ip_address: Optional[str] = None) -> AuditEvent:
         """Log a report generation event."""
         return AuditService.log_event(

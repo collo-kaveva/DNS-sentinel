@@ -36,6 +36,13 @@ This repository ships a **complete, working vertical slice**, not a mockup:
   as a confidence-reducing indicator, never a certainty
 - Background job model (`ScanJob`) with step-by-step progress, run via Celery
   in production or synchronously for testing
+- **Monitoring system**: Persistent monitoring configuration for assets (DNS, IP, certificates, services, ASN, lifecycle) with per-user ownership and scheduled checks via Celery
+- **Change detection**: Evidence-backed change detection (DNS records added/removed/changed, IP changes, certificate changes/expiration, service appearance/disappearance, ASN/provider changes, lifecycle changes) with proper comparison against previous observations
+- **Alert system**: Alert generation from monitoring events with controlled state transitions (NEW → OPEN → ACKNOWLEDGED → RESOLVED), severity levels, investigation integration, and audit logging
+- **Report generation**: Celery-powered report generation from actual stored observations with proper provenance tracking, multiple formats (JSON, HTML), and security controls
+- **Evidence and provenance**: Unified evidence system across all observation types with status classification (OBSERVED, HISTORICAL, INFERRED, ANALYST, UNKNOWN) and confidence levels
+- **Investigation management**: Case management with status, priority, evidence attachments, analyst notes, and timeline views
+- **Audit logging**: Comprehensive audit trail for security-relevant actions (login, asset creation, investigation starts, alert actions, etc.)
 - React + TypeScript + Vite + Tailwind frontend wired to the real API — no
   hardcoded/mock data — with loading, empty, and error states, including a
   live infrastructure panel with its own job polling
@@ -44,12 +51,7 @@ This repository ships a **complete, working vertical slice**, not a mockup:
   regression test for the timeout/negative-result bug found and fixed
   during this build
 
-The remaining apps (`certificates`, `services`, `lifecycle`, `monitoring`,
-`alerts`, `reports`) are scaffolded (registered Django apps with their own
-migrations folder) but intentionally left empty rather than filled with
-fake data — see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the phase-by-phase
-plan to complete them, matching the spec's own "Implementation Priority"
-phases.
+The platform now provides complete end-to-end functionality for monitoring, change detection, alerting, and reporting, all built on the existing evidence-based architecture with proper security controls and provenance tracking.
 
 ## Project structure
 

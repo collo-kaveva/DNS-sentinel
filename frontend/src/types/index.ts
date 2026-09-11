@@ -275,7 +275,7 @@ export interface AuditEvent {
 export type DateFormat = "ISO_8601" | "US" | "EUROPEAN";
 export type TimeFormat = "24_HOUR" | "12_HOUR";
 export type MonitoringBehavior = "PASSIVE" | "ACTIVE";
-export type AlertSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH";
+export type AlertSeverityThreshold = "INFO" | "LOW" | "MEDIUM" | "HIGH";
 
 export interface UserSettings {
   date_format: DateFormat;
@@ -285,7 +285,7 @@ export interface UserSettings {
   refresh_interval_minutes: number;
   default_monitoring_behavior: MonitoringBehavior;
   email_alerts: boolean;
-  alert_severity_threshold: AlertSeverity;
+  alert_severity_threshold: AlertSeverityThreshold;
   session_timeout_minutes: number;
   default_dashboard_view: string;
   updated_at: string;
@@ -402,7 +402,7 @@ export type TimelineEventType =
 
 export interface TimelineEvent {
   event_id: string;
-  event_type: TimelineEventType;
+  event_type: string;
   timestamp: string;
   asset: string;
   description: string;
@@ -411,4 +411,206 @@ export interface TimelineEvent {
   new_state: string | null;
   evidence_id: string | null;
   metadata: Record<string, unknown>;
+}
+
+// Monitoring types
+export type MonitorType = "DNS" | "IP" | "CERTIFICATE" | "SERVICE" | "ASN" | "LIFECYCLE";
+export type MonitorFrequency = "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
+export type MonitorCheckStatus = "SUCCESS" | "FAILURE" | "PARTIAL";
+
+export interface MonitoringConfig {
+  id: string;
+  domain: string;
+  domain_name: string;
+  monitor_type: MonitorType;
+  is_enabled: boolean;
+  frequency: MonitorFrequency;
+  alert_on_change: boolean;
+  alert_on_failure: boolean;
+  next_check_scheduled: string | null;
+  last_check_completed: string | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MonitoringResult {
+  id: string;
+  domain: string;
+  domain_name: string;
+  monitoring_config: string;
+  monitor_type: MonitorType;
+  status: MonitorCheckStatus;
+  observation_id: string | null;
+  observation_type: string;
+  previous_state: Record<string, unknown>;
+  new_state: Record<string, unknown>;
+  has_changes: boolean;
+  evidence_id: string | null;
+  scan_job_id: string | null;
+  error_message: string;
+  check_started_at: string;
+  check_completed_at: string;
+  duration_seconds: number | null;
+  created_at: string;
+}
+
+export type ChangeEventType = 
+  | "DNS_RECORD_ADDED" 
+  | "DNS_RECORD_REMOVED" 
+  | "DNS_RECORD_CHANGED"
+  | "IP_CHANGED" 
+  | "CERTIFICATE_CHANGED" 
+  | "CERTIFICATE_EXPIRED"
+  | "SERVICE_APPEARED" 
+  | "SERVICE_DISAPPEARED"
+  | "ASN_CHANGED" 
+  | "PROVIDER_CHANGED" 
+  | "LIFECYCLE_CHANGED";
+
+export interface ChangeEvent {
+  id: string;
+  domain: string;
+  domain_name: string;
+  monitoring_result: string;
+  event_type: ChangeEventType;
+  description: string;
+  previous_value: string;
+  new_value: string;
+  entity_name: string;
+  entity_type: string;
+  evidence_id: string | null;
+  alert_generated: boolean;
+  alert_id: string | null;
+  metadata: Record<string, unknown>;
+  detected_at: string;
+}
+
+// Alert types
+export type AlertStatus = "NEW" | "OPEN" | "ACKNOWLEDGED" | "RESOLVED" | "DISMISSED";
+export type AlertSeverityLevel = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type AlertType = 
+  | "DNS_RECORD_ADDED" 
+  | "DNS_RECORD_REMOVED" 
+  | "DNS_RECORD_CHANGED"
+  | "IP_CHANGED" 
+  | "CERTIFICATE_CHANGED" 
+  | "CERTIFICATE_EXPIRED"
+  | "CERTIFICATE_EXPIRING_SOON"
+  | "SERVICE_APPEARED" 
+  | "SERVICE_DISAPPEARED"
+  | "ASN_CHANGED" 
+  | "PROVIDER_CHANGED" 
+  | "LIFECYCLE_CHANGED";
+
+export interface Alert {
+  id: string;
+  domain: string;
+  domain_name: string;
+  owner: number;
+  owner_username: string;
+  alert_type: AlertType;
+  severity: AlertSeverityLevel;
+  status: AlertStatus;
+  title: string;
+  description: string;
+  trigger_event_id: string | null;
+  trigger_event_type: string;
+  evidence_id: string | null;
+  investigation: string | null;
+  assigned_analyst: number | null;
+  assigned_analyst_username: string | null;
+  resolution_notes: string;
+  created_at: string;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  dismissed_at: string | null;
+}
+
+export interface AlertRule {
+  id: string;
+  owner: number;
+  owner_username: string;
+  name: string;
+  description: string;
+  alert_type: AlertType;
+  severity: AlertSeverityLevel;
+  apply_to_all_domains: boolean;
+  specific_domains: string[];
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Report types
+export type ReportStatus = "QUEUED" | "GENERATING" | "COMPLETED" | "FAILED";
+export type ReportFormat = "JSON" | "HTML" | "PDF";
+export type ReportSectionType = 
+  | "EXECUTIVE_SUMMARY" 
+  | "SCOPE" 
+  | "ASSETS" 
+  | "DNS"
+  | "CERTIFICATES" 
+  | "INFRASTRUCTURE" 
+  | "SERVICES" 
+  | "LIFECYCLE"
+  | "MONITORING" 
+  | "ALERTS" 
+  | "HISTORY" 
+  | "EVIDENCE"
+  | "FINDINGS" 
+  | "RECOMMENDATIONS" 
+  | "LIMITATIONS";
+
+export interface Report {
+  id: string;
+  owner: number;
+  owner_username: string;
+  title: string;
+  domains: string[];
+  scope_description: string;
+  format: ReportFormat;
+  requested_sections: string[];
+  status: ReportStatus;
+  error_message: string;
+  celery_task_id: string;
+  content: Record<string, unknown>;
+  content_html: string;
+  generated_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportSection {
+  id: string;
+  report: string;
+  section_type: ReportSectionType;
+  title: string;
+  content: string;
+  evidence_ids: string[];
+  observation_ids: string[];
+  findings: Record<string, unknown>[];
+  status: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  order: number;
+  created_at: string;
+}
+
+export interface ReportFinding {
+  id: string;
+  report_section: string;
+  title: string;
+  description: string;
+  severity: "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  source_observation_id: string | null;
+  source_observation_type: string;
+  evidence_id: string | null;
+  asset_id: string | null;
+  asset_name: string;
+  asset_type: string;
+  finding_status: string;
+  observed_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
